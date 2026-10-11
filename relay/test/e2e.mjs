@@ -162,6 +162,14 @@ try {
   eq(r.status, 403, 'nor switching the whole show to another title');
   r = await seatGet(producer, '/api/remote');
   eq(r.status, 403, 'and a seat cannot see or manage the other seats');
+  r = await seatPost(producer, '/api/adapters/cs2gsi/install', { replace: true });
+  eq(r.status, 403, 'nor write a GSI cfg into a game install');
+  r = await seatGet(producer, '/api/adapters/cs2gsi/install');
+  eq(r.status, 403, 'nor read the cfg text (it carries the GSI token)');
+  r = await seatPost(producer, '/api/adapters/cs2gsi/capture', { on: true });
+  eq(r.status, 403, 'nor switch on "Record raw game data"');
+  r = await seatGet(producer, '/api/adapters/cs2gsi/capture');
+  eq(r.status, 403, 'nor learn where a capture file is');
 
   // The operator turns stream control on; now it is allowed through (OBS is not
   // running in this test, so the answer is a 503 from the bridge, not a 403).

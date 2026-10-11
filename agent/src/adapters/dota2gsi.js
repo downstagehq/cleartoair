@@ -13,6 +13,12 @@ export const id = 'dota2gsi';
 export const games = ['dota2'];
 export const label = 'Dota 2 Game State Integration';
 export const describe = 'Listens on :7702 for POSTs from gamestate_integration_cleartoair.cfg (needs -gamestateintegration)';
+// Where Install writes the cfg (see _steam.js): Steam app 570, <library>\steamapps\common\<installdir>\game\dota\cfg\gamestate_integration\
+// game\dota\cfg must exist; the gamestate_integration folder is created if it is not there yet.
+export const steam = { appId: 570, name: 'Dota 2', installDir: 'dota 2 beta', cfgDir: ['game', 'dota', 'cfg', 'gamestate_integration'], createLast: true,
+  restart: 'Check the -gamestateintegration launch option (Steam > Dota 2 > Properties > Launch Options), then restart Dota 2.' };
+// "Record raw game data" is offered on the Data tab (registry.js / capture.js).
+export const capturable = true;
 
 const HERO_NAMES = {
   antimage: 'Anti-Mage', axe: 'Axe', bane: 'Bane', bloodseeker: 'Bloodseeker', crystal_maiden: 'Crystal Maiden', drow_ranger: 'Drow Ranger',
@@ -171,7 +177,7 @@ export function parsePayload(p, ctx = { events: [], prev: {} }) {
   };
 }
 
-export function create({ config, emit, log, state, getState } = {}) {
+export function create({ config, emit, log, state, getState, capture } = {}) {
   const o = resolveOpts({ config, state, getState });
   getState = o.getState;
   const port = o.port('dota2gsi', 7702);
@@ -179,7 +185,7 @@ export function create({ config, emit, log, state, getState } = {}) {
   const ctx = { events: [], prev: {} };
   let last = null;
   const srv = createGsiServer({
-    port, host, tag: id, log,
+    port, host, tag: id, log, capture,
     getToken: () => resolveToken({ config, getState }),
     onPayload: (p) => { const raw = parsePayload(p, ctx); last = raw; emit?.(normalize(raw, getState?.())); },
   });
@@ -225,7 +231,7 @@ export function install({ config, state, getState } = {}) {
   return {
     files: [{ path: 'gamestate_integration_cleartoair.cfg', content }],
     instructions: [
-      `1. Save gamestate_integration_cleartoair.cfg into:`,
+      `1. Install saves this file for you. To save it by hand instead, save gamestate_integration_cleartoair.cfg into:`,
       `   <Steam>\\steamapps\\common\\dota 2 beta\\game\\dota\\cfg\\gamestate_integration\\`,
       `   (create the gamestate_integration folder if it does not exist).`,
       `2. Add the launch option  -gamestateintegration  in Steam > Dota 2 > Properties > Launch Options. Without it nothing is sent.`,
@@ -233,7 +239,7 @@ export function install({ config, state, getState } = {}) {
       `   so the per-team player/hero/items dicts (team2 = Radiant, team3 = Dire) are included.`,
       `   Organisation names come from the "league" block, which the game only fills when spectating a league match;`,
       `   otherwise the sides show as Radiant / Dire and the control room's team names are used.`,
-      `4. Token "${token}" is the current settings.gsiToken. If it is changed or regenerated, install this cfg again`,
+      `4. Token "${token}" is the current settings.gsiToken. If it is changed or regenerated, press Install again`,
       `   and restart Dota 2. Save the file WITHOUT a UTF-8 BOM. The spectating client must run on this PC for now.`,
     ].join('\n'),
   };

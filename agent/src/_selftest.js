@@ -1080,5 +1080,175 @@ console.log('\n== update: signed release manifests ==');
   }
 }
 
+// ---------------------------------------------------------------------------
+// Show-day fixes (0.3.1): adapters come back after a restart, preflight warns when
+// a game feed exists but nothing is running, Install writes the GSI cfg itself, and
+// "Record raw game data". Temp dirs only: nothing here touches agent/data.
+{
+  const os = await import('node:os');
+  const { pathToFileURL } = await import('node:url');
+  const pathToFileURLHref = (p) => pathToFileURL(p).href;
+  const { createRegistry, loadRunning, publicConfig } = await import('./registry.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cta-showday-'));
+  const liveLog = [];
+  const fakeState = (st = defaultState()) => ({ get: () => st, setLive: (p) => liveLog.push(p), resetLive: () => {}, patch: () => {}, revision: () => 1 });
+  const hub = { broadcast: () => {} };
+  try {
+    console.log('\n== registry: adapters come back after a restart ==');
+    // A fake adapter folder: two live adapters that count their starts, one that cannot start.
+    const dir = path.join(tmp, 'adapters');
+    fs.mkdirSync(dir);
+    const fake = (id, extra = '') => `export const id = '${id}'; export const games = ['cs2']; export const label = '${id} label';
+      export const starts = []; ${extra}
+      export function create() { let on = false; return { start: async (cfg) => { starts.push(cfg); on = true; }, stop: async () => { on = false; }, status: () => ({ connected: on, detail: '' }) }; }`;
+    fs.writeFileSync(path.join(dir, 'feeda.js'), fake('feeda'));
+    fs.writeFileSync(path.join(dir, 'feedb.js'), fake('feedb'));
+    fs.writeFileSync(path.join(dir, 'broken.js'), `export const id = 'broken'; export const games = ['cs2'];
+      export function create() { return { start: async () => { throw Object.assign(new Error('listen EADDRINUSE 127.0.0.1:7701'), { code: 'EADDRINUSE' }); }, stop: async () => {}, status: () => ({ connected: false }) }; }`);
+    const runningFile = path.join(tmp, 'data', 'adapters.json');
+    const opts = { state: fakeState(), hub, adaptersDir: dir, simDir: path.join(tmp, 'no-sims'), runningFile, captureDir: path.join(tmp, 'captures') };
+
+    const r1 = createRegistry(opts);
+    await r1.load();
+    await r1.startAdapter('feeda', { config: { mode: 'observer', gsiToken: 'secret-1', apiKey: 'k', nested: { x: 1 } } });
+    await r1.startAdapter('feedb');
+    let threw = false; try { await r1.startAdapter('broken'); } catch { threw = true; }
+    ok(threw && !('broken' in loadRunning(runningFile)), 'a Start that fails (port taken) is not remembered');
+    eq(Object.keys(loadRunning(runningFile)).sort(), ['feeda', 'feedb'], 'an operator Start is written to adapters.json');
+    eq(loadRunning(runningFile).feeda.config, { mode: 'observer' }, 'only the non-secret, plain start config is kept (no token, no key, no objects)');
+    ok(!fs.readFileSync(runningFile, 'utf8').includes('secret-1'), 'the token never reaches the file');
+    await r1.stopAdapter('feedb');
+    eq(Object.keys(loadRunning(runningFile)), ['feeda'], 'an operator Stop takes it off the list');
+    await r1.stopAll();
+    eq(Object.keys(loadRunning(runningFile)), ['feeda'], 'shutting down leaves the list alone, so it comes back');
+
+    // "The agent restarted": a new registry over the same file.
+    const r2 = createRegistry(opts);
+    await r2.load();
+    eq(r2.runningAdapters(), [], 'nothing runs before restore()');
+    const back = await r2.restore();
+    eq(back.restored, ['feeda'], 'restore() starts what the operator had running');
+    eq(r2.runningAdapters(), ['feeda'], 'and only that: feedb was stopped by the operator, broken never ran');
+    const mod = await import(pathToFileURLHref(path.join(dir, 'feeda.js')));
+    eq(mod.starts.at(-1), { mode: 'observer' }, 'with its non-secret config');
+    await r2.stopAll();
+
+    fs.writeFileSync(runningFile, JSON.stringify({ running: { broken: { startedAt: 1 }, gone: { startedAt: 1 }, '../x': { startedAt: 1 } } }));
+    const r3 = createRegistry(opts);
+    await r3.load();
+    const bad = await r3.restore();
+    ok(bad.restored.length === 0 && bad.failed.map((f) => f.id).sort().join() === 'broken,gone', `a restore that fails is a log line, not a crash (${bad.failed.map((f) => `${f.id}: ${f.error}`).join('; ')})`);
+    ok('broken' in loadRunning(runningFile) && !('../x' in loadRunning(runningFile)), 'it stays on the list for the next boot; a junk id is ignored');
+    eq(publicConfig({ port: 7701, password: 'x', obsPassword: 'y', ok: true, list: [1] }), { port: 7701, ok: true }, 'publicConfig drops secret-named keys and non-plain values');
+    fs.writeFileSync(runningFile, '{not json');
+    eq(loadRunning(runningFile), {}, 'an unreadable adapters.json restores nothing (and never throws)');
+
+    console.log('\n== preflight: a game feed exists but nothing is running ==');
+    const { createPreflight } = await import('./preflight.js');
+    const real = createRegistry({ state: fakeState(), hub, runningFile: path.join(tmp, 'real.json'), captureDir: path.join(tmp, 'captures') });
+    await real.load();   // the shipped adapters; create() binds nothing
+    eq(real.feedsFor('cs2').map((f) => f.id), ['cs2gsi'], 'CS2 has one live feed (not Manual, not the start.gg importer)');
+    eq(real.feedsFor('valorant'), [], 'Valorant has none');
+    const pf = async (game, running) => {
+      const st = { ...defaultState(), game, event: { ...defaultState().event, name: 'Test Cup' } };
+      st.live = { ...st.live, source: 'manual', updatedAt: 0 };
+      const reg = { runningAdapters: () => running, runningSims: () => [], feedsFor: (g) => real.feedsFor(g) };
+      const p = createPreflight({ state: fakeState(st), hub: { broadcast: () => {}, overlayPages: () => ({}), overlayCount: () => 0 }, bridge: { status: () => ({ connected: false }) },
+        packs: { get: (id) => PACKS[id] || null }, registry: reg, watchdog: null, port: 7700 });
+      const out = await p.run();
+      return { check: out.checks.find((c) => c.id === 'adapter-live'), out };
+    };
+    const cold = await pf('cs2', []);
+    eq(cold.check.level, 'warn', 'CS2 with no adapter running is a WARNING now, not a pass (the green lamp with no data)');
+    ok(/CS2 Game State Integration/.test(cold.check.title) && /^Data tab → CS2 Game State Integration → Start/.test(cold.check.fix), `the fix names the tab, the card and the button: "${cold.check.fix}"`);
+    ok(cold.out.warns >= 1, 'it counts as a warning, so the lamp is amber (fail > warn > ok)');
+    eq((await pf('cs2', ['manual'])).check.level, 'ok', 'the operator chose Manual on purpose -> ok');
+    eq((await pf('valorant', [])).check.level, 'ok', 'a title with no live feed -> ok, scores follow the Match tab');
+    eq((await pf('cs2', ['cs2gsi'])).check.level, 'warn', 'running but silent is still the old warning');
+
+    console.log('\n== install: write the GSI cfg, or say where it looked ==');
+    const where = { dir: path.join(tmp, 'Counter-Strike Global Offensive', 'game', 'csgo', 'cfg') };
+    const inst = createRegistry({ state: fakeState(), hub, runningFile: path.join(tmp, 'i.json'), captureDir: path.join(tmp, 'captures'),
+      findCfgDir: (g) => (where.found ? { ok: true, dir: where.dir, tried: [where.dir] } : { ok: false, tried: ['C:\\Steam\\steamapps\\libraryfolders.vdf', where.dir], reason: `${g.name} was not found in any Steam library` }) });
+    await inst.load();
+    ok(inst.adapters().find((a) => a.id === 'cs2gsi').autoInstall === true && inst.adapters().find((a) => a.id === 'dota2gsi').autoInstall === true, 'CS2 and Dota 2 Install write the file (autoInstall)');
+    ok(!inst.adapters().find((a) => a.id === 'lolclient').autoInstall, 'LoL has nothing to write');
+    const miss = inst.writeInstall('cs2gsi');
+    ok(!miss.ok && !miss.found && miss.tried.length === 2 && miss.files[0].path === 'gamestate_integration_cleartoair.cfg' && /BOM/.test(miss.instructions), 'CS2 not found -> the text, Copy-able, plus every path it tried');
+    where.found = true;
+    fs.mkdirSync(where.dir, { recursive: true });
+    const hit = inst.writeInstall('cs2gsi');
+    const onDisk = fs.readFileSync(path.join(where.dir, 'gamestate_integration_cleartoair.cfg'));
+    ok(hit.ok && hit.written && onDisk[0] !== 0xef && onDisk.toString('utf8').startsWith('"Clear to Air"') && /Restart CS2/.test(hit.restart), `found -> written without a BOM (${hit.path})`);
+    ok(inst.writeInstall('cs2gsi').unchanged === true, 'pressing Install again changes nothing');
+    let refused = false; try { inst.writeInstall('lolclient'); } catch (e) { refused = e.status === 400; }
+    ok(refused, 'an adapter with no file to write is refused (400), not guessed at');
+
+    console.log('\n== record raw game data ==');
+    const { createCaptures, stripSecrets, secretsFrom, localDate, REMOVED } = await import('./capture.js');
+    const st = defaultState();
+    st.settings.gsiToken = 'gsi-tok-123';
+    st.settings.obsPassword = 'obs-pass-456';
+    const stripped = stripSecrets({ auth: { token: 'gsi-tok-123' }, provider: { name: 'x' }, deep: [{ password: 'p', note: 'leak obs-pass-456 here' }], Token: 5, apiKey: 'k' }, secretsFrom(st));
+    eq(stripped.auth.token, REMOVED, 'the GSI auth.token is removed');
+    eq(stripped.deep[0], { password: REMOVED, note: `leak ${REMOVED} here` }, 'secret-named keys at any depth, and any secret the agent holds, wherever it appears');
+    eq([stripped.Token, stripped.apiKey, stripped.provider.name], [REMOVED, REMOVED, 'x'], 'case-insensitive key names; everything else untouched');
+    ok(/^\d{4}-\d{2}-\d{2}$/.test(localDate()), 'files are named by the local date');
+
+    const capDir = path.join(tmp, 'cap');
+    const caps = createCaptures({ dir: capDir, version: '0.3.1', getState: () => st, maxBytes: 4096 });
+    eq(caps.status('cs2gsi').on, false, 'off by default');
+    caps.start('cs2gsi', 'cs2');
+    for (let i = 0; i < 3; i++) caps.write('cs2gsi', { auth: { token: 'gsi-tok-123' }, map: { name: 'de_mirage', round: i }, provider: { appid: 730 } });
+    ok(caps.write('dota2gsi', { x: 1 }) === false, 'an adapter that is not recording writes nothing');
+    const s1 = caps.status('cs2gsi');
+    ok(s1.on && s1.payloads === 3 && path.basename(s1.file) === `cs2-${localDate()}.jsonl`, `status says where and how much (${path.basename(s1.file)}, ${s1.bytes} B, ${s1.payloads} payloads)`);
+    caps.stop('cs2gsi', 'switched off');
+    await caps.flushed();
+    const lines = fs.readFileSync(s1.file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    ok(lines[0].type === 'capture' && lines[0].adapter === 'cs2gsi' && lines[0].cleartoair === '0.3.1' && /anonymise/.test(lines[0].note), 'first line: adapter, Clear to Air version and what to anonymise (the "Real payload" template)');
+    ok(lines.slice(1).every((l, i) => l.type === 'payload' && !Number.isNaN(Date.parse(l.t)) && l.payload.map.round === i), 'then one timestamped line per payload, as received, in order');
+    ok(!fs.readFileSync(s1.file, 'utf8').includes('gsi-tok-123'), 'the token is not in the file');
+
+    caps.start('cs2gsi', 'cs2');
+    let n = 0;
+    while (caps.write('cs2gsi', { blob: 'x'.repeat(300), n })) n++;
+    const capped = caps.status('cs2gsi');
+    ok(!capped.on && /limit/.test(capped.reason) && capped.bytes <= 4096, `stops itself at the size limit and says why (${capped.bytes} B, "${capped.reason}")`);
+    await caps.flushed();
+    ok(fs.statSync(capped.file).size <= 4096, 'the file on disk is within the limit');
+    caps.start('cs2gsi', 'cs2');
+    ok(caps.status('cs2gsi').file !== capped.file && /-2\.jsonl$/.test(caps.status('cs2gsi').file), 'the next recording that day starts a new file rather than growing a full one');
+    caps.closeAll();
+    await caps.flushed();
+
+    const rc = createRegistry({ state: fakeState(st), hub, runningFile: path.join(tmp, 'c.json'), captureDir: path.join(tmp, 'rcap') });
+    await rc.load();
+    ok(rc.adapters().find((a) => a.id === 'cs2gsi').capturable && !('capture' in rc.adapters().find((a) => a.id === 'cs2gsi')), 'the adapter list says it can record, but never where (that list reaches remote seats)');
+    eq(rc.setCapture('cs2gsi', true).on, true, 'switch on through the registry');
+    let notCap = false; try { rc.setCapture('manual', true); } catch (e) { notCap = e.status === 400; }
+    ok(notCap, 'the Manual adapter has nothing to record (400)');
+    rc.setCapture('cs2gsi', false);
+    await rc.stopAll();
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
+  console.log('\n== remote seats cannot reach the show-day routes ==');
+  const { allow } = await import('./remote-policy.js');
+  const PRODUCER = { id: 's1', name: 'Guest', role: 'producer' };
+  const ALL_CAPS = { caps: { streamControl: true } };
+  for (const [m, p] of [['POST', '/api/adapters/cs2gsi/install'], ['GET', '/api/adapters/cs2gsi/install'], ['POST', '/api/adapters/dota2gsi/install'],
+    ['POST', '/api/adapters/cs2gsi/capture'], ['GET', '/api/adapters/cs2gsi/capture'], ['POST', '/api/adapters/cs2gsi/start'], ['POST', '/api/adapters/cs2gsi/stop']]) {
+    const r = allow(PRODUCER, m, p, ALL_CAPS);
+    ok(!r.ok && r.status === 403, `a producer seat, every cap on, cannot ${m} ${p}`);
+  }
+
+  console.log('\n== log: console lines in local time ==');
+  const { localClock } = await import('./log.js');
+  const d = new Date(2026, 9, 25, 9, 5, 7);
+  eq(localClock(d), '09:05:07', 'HH:MM:SS on this PC\'s clock, the same clock as the launcher\'s own stamp in launcher.log');
+}
+
 console.log(failures ? `\n${failures} CHECK(S) FAILED\n` : '\nALL CHECKS PASSED\n');
 process.exit(failures ? 1 : 0);

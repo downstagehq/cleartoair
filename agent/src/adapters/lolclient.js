@@ -11,6 +11,8 @@ import { makeLogger, resolveOpts } from './_gsi.js';
 
 export const id = 'lolclient';
 export const games = ['lol'];
+// "Record raw game data" is offered on the Data tab: every allgamedata poll is handed to capture().
+export const capturable = true;
 export const label = 'LoL Live Client Data';
 export const describe = 'Polls https://127.0.0.1:2999/liveclientdata/allgamedata every second (self-signed TLS)';
 
@@ -106,7 +108,7 @@ export function parseAllGameData(d, ctx = { events: [], seen: new Set() }) {
   };
 }
 
-export function create({ config, emit, log, state, getState } = {}) {
+export function create({ config, emit, log, state, getState, capture } = {}) {
   const L = makeLogger(log, id);
   const o = resolveOpts({ config, state, getState });
   getState = o.getState;
@@ -140,6 +142,7 @@ export function create({ config, emit, log, state, getState } = {}) {
       const data = await fetchOnce();
       polls++;
       lastOk = Date.now();
+      if (capture) { try { capture(data); } catch { /* never stops the feed */ } }
       if (!wasConnected) { wasConnected = true; L('connected to Live Client Data'); ctx.seen.clear(); ctx.events.length = 0; }
       const raw = parseAllGameData(data, ctx);
       last = raw;

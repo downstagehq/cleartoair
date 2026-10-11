@@ -6,8 +6,10 @@ body:
     attributes:
       value: |
         Most adapters were written from documentation. A real payload is one of the most
-        useful things you can send. CONTRIBUTING.md ("Find out what the game actually sends")
-        explains how to capture one.
+        useful things you can send. For a game with an adapter, turn on Data tab → the adapter
+        card → "Record raw game data" and attach the `.jsonl` file it writes (tokens are already
+        taken out; names and IDs are not). CONTRIBUTING.md ("Find out what the game actually sends")
+        explains the other ways to capture one.
 
         **Anonymise before you paste.** Replace player names, team names, Steam/Epic/Riot IDs,
         match and server ids, and the GSI `auth.token`. Use Alpha / Bravo and made-up player names.

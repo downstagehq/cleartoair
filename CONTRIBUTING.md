@@ -165,7 +165,15 @@ Before writing code, get a real payload if you possibly can. Several adapters we
 written from documentation and community notes alone, and the README lists what
 is still unconfirmed. A captured payload beats any document.
 
-Ways to capture one (stop the matching adapter first if it uses the same port):
+**For a game that already has an adapter** (CS2, Dota 2, League, Rocket League,
+Apex), let Clear to Air record it: Data tab → the adapter card → **Record raw game
+data**. While it is on, every payload the adapter receives is appended, with a
+timestamp, to `agent/data/captures/<game>-<date>.jsonl` (the card shows the path
+and size; it stops itself at 50 MB). Tokens and passwords are taken out before
+anything is written; player names, account IDs and match ids are not.
+
+For a game without an adapter, or to see what a different cfg would send, capture
+it by hand (stop the matching adapter first if it uses the same port):
 
 - **Valve GSI (CS2, Dota 2):** add a second `gamestate_integration_*.cfg` that
   points at a spare port, and run a tiny listener that appends each POST body to

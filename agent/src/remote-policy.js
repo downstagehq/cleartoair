@@ -82,7 +82,9 @@ const RULES = [
   // on the deny-by-default fall-through:
   //   obs/raw            - an arbitrary obs-websocket call is the whole API again
   //   obs/collection/*   - writes and deletes files in OBS's own config folder
-  //   adapters/*/install - writes GSI config files into a game's install
+  //   adapters/*/install - writes GSI config files into a game's install (GET shows the token)
+  //   adapters/*/capture - records raw game data to a file on this PC, and says where
+  //   adapters/*/start|stop - opens or closes a listener on the broadcast PC
   //   adapters/*/run     - pushes fabricated telemetry at the overlays
   //   sim/*              - a simulator on air would look like a real game
   //   game, event/new    - resets the show out from under the operator

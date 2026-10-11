@@ -7,7 +7,9 @@
 //   Clear to Air.exe        this launcher (tray icon = the lamp)
 //   runtime\node.exe        the Node runtime the agent runs on
 //   app\                    package.json, agent\, packs\, overlays\, web\dist\
-//   app\agent\data\         state.json and the log - survives updates
+//   app\agent\data\         state.json, adapters.json, captures\ - survives updates
+//   launcher.log            this launcher's lines AND the agent's console output, local
+//                           time; rolls at 2 MB to launcher.log.old. Tray > Open log.
 //
 // What it does:
 //   * starts runtime\node.exe app\agent\src\index.js hidden, restarts it if it dies
@@ -113,7 +115,10 @@ namespace ClearToAir
             menu.Items.Add("Check for updates...", null, (s, e) => CheckForUpdates(true));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Open app folder", null, (s, e) => Process.Start("explorer.exe", Root));
-            menu.Items.Add("Open log", null, (s, e) => { try { Process.Start(Path.Combine(AppDir, "agent", "data", "agent.log")); } catch { } });
+            // launcher.log is the one log there is: the agent writes only to its console,
+            // which StartAgent mirrors in here. (It used to open app\agent\data\agent.log,
+            // which nothing writes.) Notepad, not the .log association, which may be unset.
+            menu.Items.Add("Open log", null, (s, e) => OpenLog());
             menu.Items.Add(new ToolStripSeparator());
             var v = new ToolStripMenuItem("Clear to Air " + version); v.Enabled = false; menu.Items.Add(v);
             menu.Items.Add("Quit", null, (s, e) => Quit());
@@ -311,6 +316,18 @@ namespace ClearToAir
         void OpenControlRoom()
         {
             try { Process.Start("http://127.0.0.1:" + Port + "/"); } catch (Exception ex) { Log("open failed: " + ex.Message); }
+        }
+
+        /// Tray > Open log: launcher.log in Notepad. Times in it are this PC's local time.
+        static void OpenLog()
+        {
+            Log("log opened from the tray");   // also makes sure the file exists
+            try { Process.Start("notepad.exe", "\"" + LogFile + "\""); }
+            catch (Exception ex)
+            {
+                try { Process.Start("explorer.exe", "/select,\"" + LogFile + "\""); }
+                catch { Say("Could not open the log: " + ex.Message + "\n\nIt is " + LogFile); }
+            }
         }
 
         // ---- updates -----------------------------------------------------------------

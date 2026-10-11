@@ -42,10 +42,18 @@ Stop with Ctrl+C (adapters and simulators are stopped, OBS disconnected).
 
 ### Game State Integration cfg (CS2 / Dota 2)
 
-`GET /api/adapters/cs2gsi/install` returns the file to write and where:
-`<Steam>\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\gamestate_integration_cleartoair.cfg`
-(Dota 2: `...\dota 2 beta\game\dota\cfg\gamestate_integration\`). The token is
-`state.settings.gsiToken` (default `cta`).
+`POST /api/adapters/cs2gsi/install` (the Data tab's Install) finds the game through Steam's
+libraries and writes, UTF-8 without a BOM,
+`<library>\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\gamestate_integration_cleartoair.cfg`
+(Dota 2: `...\dota 2 beta\game\dota\cfg\gamestate_integration\`). It never replaces a file of that
+name it did not write unless asked again with `replace: true` (the old one is kept as `.old`).
+`GET` returns the file and the manual steps. The token is `state.settings.gsiToken` (a random
+one is generated on first boot). Both are local-only; see `agent/src/adapters/_steam.js`.
+
+### Other files under agent/data
+
+- `adapters.json` — adapters the operator started; restarted on boot, forgotten on Stop.
+- `captures/<game>-<date>.jsonl` — "Record raw game data" (Data tab), tokens removed, 50 MB cap.
 
 ## API
 
@@ -59,9 +67,11 @@ POST /api/state/replace               whole state
 POST /api/state/undo                  pop the 200-deep history
 GET  /api/packs                       every packs/*/pack.json
 POST /api/game        {game}          switch pack; veto pool reset from pack.maps, steps cleared
-GET  /api/adapters                    [{id,label,games,describe,status,running,installable}]
-POST /api/adapters/:id/start|stop
+GET  /api/adapters                    [{id,label,games,describe,status,running,installable,autoInstall,capturable}]
+POST /api/adapters/:id/start|stop     start is remembered in agent/data/adapters.json and restarted on boot
 GET  /api/adapters/:id/install        {files:[{path,content}], instructions}
+POST /api/adapters/:id/install        {replace?} -> {ok, found, written, unchanged, foreign, backup, path, tried, files, instructions}
+GET|POST /api/adapters/:id/capture    {on} -> {on, file, bytes, payloads, maxBytes, reason}
 GET  /api/sims                        [{id,label,running}]
 POST /api/sim/:game/start|stop
 GET  /api/obs                         bridge status (scenes, program, preview, items, meters in dBFS, ...)

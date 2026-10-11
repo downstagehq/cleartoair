@@ -22,6 +22,8 @@ import { makeLogger, resolveOpts } from './_gsi.js';
 
 export const id = 'rlstats';
 export const games = ['rocketleague'];
+// "Record raw game data" is offered on the Data tab: every framed message is handed to capture().
+export const capturable = true;
 export const label = 'Rocket League Stats API / SOS';
 export const describe = 'TCP 127.0.0.1:49123 (native Stats API) with fallback to ws://127.0.0.1:49122 (SOS)';
 
@@ -259,7 +261,7 @@ export function modelToRaw(m, feedName) {
   };
 }
 
-export function create({ config, emit, log, state, getState } = {}) {
+export function create({ config, emit, log, state, getState, capture } = {}) {
   const L = makeLogger(log, id);
   const o = resolveOpts({ config, state, getState });
   getState = o.getState;
@@ -273,7 +275,7 @@ export function create({ config, emit, log, state, getState } = {}) {
 
   const flush = () => { emitTimer = null; emit?.(normalize(modelToRaw(model, feed), getState?.())); };
   const schedule = () => { if (!emitTimer) emitTimer = setTimeout(flush, 50); };
-  const onMsg = (msg) => { msgs++; lastMsgAt = Date.now(); try { applyMessage(model, msg); } catch (e) { L(`message error: ${e.message}`); } schedule(); };
+  const onMsg = (msg) => { msgs++; lastMsgAt = Date.now(); if (capture) { try { capture(msg); } catch { /* never stops the feed */ } } try { applyMessage(model, msg); } catch (e) { L(`message error: ${e.message}`); } schedule(); };
 
   function backoff() { attempts++; return Math.min(10_000, 1000 * Math.pow(1.6, Math.min(attempts, 6))); }
   function later(fn, ms) { if (!running) return; clearTimeout(timer); timer = setTimeout(fn, ms); }

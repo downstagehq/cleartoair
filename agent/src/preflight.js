@@ -221,7 +221,17 @@ export function createPreflight(ctx) {
     const sims = registry.runningSims();
     const simSource = typeof (st.live && st.live.source) === 'string' && st.live.source.startsWith('sim:');
     const running = registry.runningAdapters().filter((id) => id !== 'manual');
-    if (!running.length) out.push(ok('adapter-live', 'no game adapter running', 'scores follow the Match tab (manual)'));
+    // Nothing feeding the graphics. That is fine when the title has no live feed,
+    // or the operator chose Manual on purpose; it is NOT fine when a feed exists
+    // and nobody pressed Start (or it did not come back after a restart): the
+    // lamp used to stay green while the scorebug sat frozen.
+    const feeds = typeof registry.feedsFor === 'function' ? registry.feedsFor(st.game) : [];
+    if (!running.length && registry.runningAdapters().includes('manual')) out.push(ok('adapter-live', 'scores follow the Match tab (Manual adapter on)', feeds.length ? `${feeds.map((f) => f.label).join(', ')} not running, by choice` : ''));
+    else if (!running.length && feeds.length) {
+      const name = feeds[0].label;
+      out.push(warn('adapter-live', `No game data: the ${name} adapter is not running`, 'the scorebug and cards only change when someone scores in the Match tab',
+        `Data tab → ${name} → Start. Scoring this show by hand instead? Data tab → Manual (control room) → Start, and this clears.`));
+    } else if (!running.length) out.push(ok('adapter-live', 'no live feed for this game', 'scores follow the Match tab (manual)'));
     else {
       const age = Date.now() - (st.live.updatedAt || 0);
       if (simSource) out.push(warn('adapter-live', `${running.join(', ')} running but the graphics are showing simulator data`, `live.source=${st.live.source}`, 'Data tab → Simulators: press Stop so the real game feed reaches the graphics.'));

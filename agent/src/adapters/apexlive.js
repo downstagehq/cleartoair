@@ -15,6 +15,8 @@ import { makeLogger, resolveOpts } from './_gsi.js';
 
 export const id = 'apexlive';
 export const games = ['apex'];
+// "Record raw game data" is offered on the Data tab: every LiveAPI message is handed to capture().
+export const capturable = true;
 export const label = 'Apex Legends LiveAPI';
 export const describe = 'WebSocket server on :7777 — the game connects with +cl_liveapi_ws_servers';
 
@@ -116,7 +118,7 @@ export function modelToRaw(m) {
   };
 }
 
-export function create({ config, emit, log, state, getState } = {}) {
+export function create({ config, emit, log, state, getState, capture } = {}) {
   const L = makeLogger(log, id);
   const o = resolveOpts({ config, state, getState });
   getState = o.getState;
@@ -140,6 +142,7 @@ export function create({ config, emit, log, state, getState } = {}) {
         sock.on('message', (buf) => {
           msgs++; lastMsgAt = Date.now();
           let msg; try { msg = JSON.parse(buf.toString('utf8')); } catch { return; }
+          if (capture) { try { capture(msg); } catch { /* never stops the feed */ } }
           const list = Array.isArray(msg) ? msg : [msg];
           for (const one of list) { try { applyEvent(model, one); } catch (e) { L(`event error: ${e.message}`); } }
           schedule();

@@ -372,11 +372,44 @@ export interface Adapter {
   describe?: string;
   status?: { connected: boolean; detail?: string; latency?: number };
   running: boolean;
+  /** Install writes the game's cfg file itself (CS2, Dota 2) - POST /api/adapters/<id>/install. */
+  autoInstall?: boolean;
+  /** Offers "Record raw game data" - /api/adapters/<id>/capture. */
+  capturable?: boolean;
 }
 
 export interface AdapterInstall {
   files: { path: string; content: string }[];
   instructions: string;
+}
+
+/** POST /api/adapters/<id>/install: the file written, or why not plus the text to save by hand. */
+export interface AdapterInstallResult extends AdapterInstall {
+  ok: boolean;
+  found: boolean;
+  written?: boolean;
+  unchanged?: boolean;
+  /** A file of that name is there and Clear to Air did not write it. */
+  foreign?: boolean;
+  backup?: string | null;
+  path?: string;
+  error?: string;
+  reason?: string;
+  game?: string;
+  restart?: string;
+  /** Every place it looked, in order. */
+  tried: string[];
+}
+
+/** GET|POST /api/adapters/<id>/capture */
+export interface CaptureStatus {
+  on: boolean;
+  file: string | null;
+  dir: string;
+  bytes: number;
+  payloads: number;
+  maxBytes: number;
+  reason?: string;
 }
 
 export interface PackMap {

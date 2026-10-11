@@ -10,6 +10,10 @@ export const id = 'cs2gsi';
 export const games = ['cs2'];
 export const label = 'CS2 Game State Integration';
 export const describe = 'Listens on :7701 for POSTs from gamestate_integration_cleartoair.cfg (observer client sends all players)';
+// Where Install writes the cfg (see _steam.js): Steam app 730, <library>\steamapps\common\<installdir>\game\csgo\cfg\
+export const steam = { appId: 730, name: 'Counter-Strike 2', installDir: 'Counter-Strike Global Offensive', cfgDir: ['game', 'csgo', 'cfg'], restart: 'Restart CS2 (it reads the file at launch).' };
+// "Record raw game data" is offered on the Data tab (registry.js / capture.js).
+export const capturable = true;
 
 const MAP_NAMES = {
   de_mirage: 'Mirage', de_inferno: 'Inferno', de_nuke: 'Nuke', de_ancient: 'Ancient', de_anubis: 'Anubis',
@@ -120,7 +124,7 @@ export function parsePayload(p, ctx = { events: [], prev: {} }) {
   };
 }
 
-export function create({ config, emit, log, state, getState } = {}) {
+export function create({ config, emit, log, state, getState, capture } = {}) {
   const o = resolveOpts({ config, state, getState });
   getState = o.getState;
   const port = o.port('cs2gsi', 7701);
@@ -128,7 +132,7 @@ export function create({ config, emit, log, state, getState } = {}) {
   const ctx = { events: [], prev: {} };
   let last = null;
   const srv = createGsiServer({
-    port, host, tag: id, log,
+    port, host, tag: id, log, capture,
     getToken: () => resolveToken({ config, getState }),
     onPayload: (p) => {
       const raw = parsePayload(p, ctx);
@@ -182,8 +186,8 @@ export function install({ config, state, getState } = {}) {
   return {
     files: [{ path: 'gamestate_integration_cleartoair.cfg', content }],
     instructions: [
-      `1. Save gamestate_integration_cleartoair.cfg WITHOUT a UTF-8 BOM (Notepad: Save As > Encoding "UTF-8", not`,
-      `   "UTF-8 with BOM") into:`,
+      `1. Install saves this file for you. To save it by hand instead: gamestate_integration_cleartoair.cfg WITHOUT`,
+      `   a UTF-8 BOM (Notepad: Save As > Encoding "UTF-8", not "UTF-8 with BOM", which CS2 cannot read) into:`,
       `   <Steam>\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg\\`,
       `   (e.g. C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg\\)`,
       `2. Restart CS2. The file is read at launch; no launch option is needed.`,
@@ -191,7 +195,7 @@ export function install({ config, state, getState } = {}) {
       `   GOTV, or a demo (\`playdemo <file>\` in the console). Only a spectating client sends allplayers_*;`,
       `   a playing client only sends its own player block.`,
       `4. Token "${token}" is the current settings.gsiToken; mismatches are rejected with 401 and logged once.`,
-      `   If the token is changed or regenerated, install this cfg again and restart CS2.`,
+      `   If the token is changed or regenerated, press Install again and restart CS2.`,
       `5. The observer client must run on this PC for now (the receiver only listens on 127.0.0.1).`,
     ].join('\n'),
   };

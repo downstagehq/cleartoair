@@ -45,9 +45,11 @@ export function resolveToken({ config, getState, state }) {
 }
 
 /**
- * createGsiServer({ port, host, tag, log, getToken, onPayload }) -> { start, stop, lastAt, stats }
+ * createGsiServer({ port, host, tag, log, getToken, onPayload, capture }) -> { start, stop, lastAt, stats }
+ * `capture(payload)` (optional, from the registry) sees every accepted payload as the game sent it,
+ * before parsing - the "Record raw game data" switch. It strips the token itself.
  */
-export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, onPayload }) {
+export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, onPayload, capture }) {
   const L = makeLogger(log, tag);
   let server = null;
   let lastAt = 0;
@@ -78,6 +80,7 @@ export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, 
       res.writeHead(200); res.end();
       stats.received++;
       lastAt = Date.now();
+      if (typeof capture === 'function') { try { capture(payload); } catch { /* a full disk never stops the feed */ } }
       try { onPayload(payload); } catch (e) { L(`parse error: ${e?.message || e}`); }
     });
     req.on('error', () => { try { res.writeHead(400); res.end(); } catch {} });

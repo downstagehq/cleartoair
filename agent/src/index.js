@@ -83,6 +83,9 @@ async function main() {
   });
   log.info('agent', `http://${HOST}:${args.port}  (control room /, overlays /packs/<game>/overlay/<page>.html, ws /ws)`);
 
+  // Whatever the operator had started before a crash, an update or a relaunch
+  // (agent/data/adapters.json). Before preflight, so its first pass sees them.
+  await registry.restore().catch((e) => log.warn('registry', `restore: ${e.message}`));
   preflight.start();
   watchdog.start();
   bridge.connect();

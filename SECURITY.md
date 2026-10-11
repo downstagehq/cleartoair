@@ -22,7 +22,8 @@ Please include:
 - what an attacker needs first (a seat, an invite link, a page open in the
   operator's browser, code on the same PC, ...);
 - steps to reproduce, and what happened compared with what should have happened;
-- logs if they help (`agent/data/agent.log`, `launcher.log`), **with passwords,
+- logs if they help (`launcher.log` next to `Clear to Air.exe`, or tray menu → Open log;
+  from a source checkout, the agent window's output), **with passwords,
   tokens, invite links and room ids removed**.
 
 If you are not sure whether something is a security issue, report it privately

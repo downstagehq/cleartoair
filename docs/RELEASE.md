@@ -11,7 +11,8 @@ and how an installed copy finds out about it.
 Clear to Air.exe      tray launcher (tools/launcher, built with Windows' own csc.exe)
 runtime\node.exe      the Node runtime, copied from the machine that packaged
 app\                  package.json · agent\ · packs\ · overlays\ · web\dist\
-app\agent\data\       state.json + log, created on first run, kept across updates
+app\agent\data\       state.json, adapters.json, captures\ - created on first run, kept across updates
+launcher.log          the launcher's lines and the agent's output (local time), rolls at 2 MB; tray > Open log
 VERSION · README.txt
 ```
 
@@ -56,7 +57,8 @@ pointing at the newest public zip until those installs have updated once.)
 ## Cutting a release
 
 1. Bump `version` in the root `package.json` (the agent reports it at `/api/version`,
-   the status bar shows it, the launcher reads it from `app\package.json`).
+   the status bar shows it, the launcher reads it from `app\package.json`), and put the
+   release's notes at the top of `docs/CHANGELOG.md` (the `gh release` notes come from there).
 2. `node tools/package.mjs --notes "one line for the update prompt"`
    - runs `npm run build` and `npm test`
    - packs the icon, compiles the launcher

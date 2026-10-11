@@ -53,6 +53,23 @@ GSI token (`_gsi.js resolveToken`): the first non-empty of `settings.gsiToken` �
 `config.gsiToken`, else the legacy `'cta'`. An empty setting never disables auth. `install()` prints the
 current token into the cfg, so re-install the cfg whenever the token changes.
 
+**Install writes the cfg (cs2gsi, dota2gsi; `_steam.js`).** An adapter that exports `steam = { appId, name,
+installDir, cfgDir, createLast?, restart }` gets `POST /api/adapters/<id>/install`: Steam's registry value
+(`HKCU\Software\Valve\Steam` `SteamPath`, then the HKLM `InstallPath`) → `steamapps\libraryfolders.vdf` → the
+library listing the app (or holding its `appmanifest_<id>.acf`, whose `installdir` wins) →
+`steamapps\common\<installdir>\<cfgDir>`. It writes only `gamestate_integration_cleartoair.cfg`, UTF-8 without a
+BOM, via a temp file and a rename. The game's own cfg folder must exist (Dota's `gamestate_integration\` is the one
+folder it creates). An existing file that does not start with `"Clear to Air"` is reported (`foreign`) and only
+replaced on a second request with `replace: true`, which keeps it as `.old`. If the game is not found, the answer
+carries the text to save by hand and every path it tried (`tried`). Local operator only: no remote-policy rule.
+
+**Record raw game data (`capturable`; `agent/src/capture.js`).** A module exporting `capturable = true` receives
+`capture(payload)` in `create()` and calls it with every raw message (GSI: each accepted POST; rlstats: each
+framed message; apexlive: each LiveAPI message; lolclient: each `allgamedata` poll). It is a no-op until the
+Data tab switch is on; then each payload goes to `agent/data/captures/<game>-<YYYY-MM-DD>.jsonl` (one header line,
+then `{type:"payload", t, adapter, payload}` per line), tokens and every secret the agent holds removed, stopping
+itself at 50 MB. Player names and IDs are kept: anonymise before sharing (the "Real payload" issue template).
+
 ### cs2gsi — what it yields
 
 `map.name → mapName` (prettified: `de_dust2 → Dust II`), `map.round → round` (1-based while live),
@@ -66,8 +83,8 @@ Payloads whose `auth.token` ≠ `settings.gsiToken` get 401 and one log line.
 
 The cfg requests Valve's observer set: `provider, map, map_round_wins, round, phase_countdowns, bomb,
 allplayers_id/state/match_stats/weapons, allplayers_position ("0", optional), player_id/state/match_stats/weapons`.
-Without `map_round_wins` the game never sends `map.round_wins` (`extra.roundWins`). Save it **without a UTF-8
-BOM**. A **playing** client only sends `player_*`; spectate (Watch tab, GOTV or `playdemo`) for `allplayers_*`.
+Without `map_round_wins` the game never sends `map.round_wins` (`extra.roundWins`). Install saves it **without a
+UTF-8 BOM**; anyone saving it by hand must do the same. A **playing** client only sends `player_*`; spectate (Watch tab, GOTV or `playdemo`) for `allplayers_*`.
 
 ### dota2gsi — what it yields
 

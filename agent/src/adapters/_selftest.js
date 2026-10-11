@@ -22,6 +22,7 @@ const state = {
 const getState = () => state;
 const last = {};
 const emit = (live) => { if (live?.source) last[live.source] = live; };
+const captured = {};
 const log = (line) => console.log('   log:', line);
 
 let failures = 0;
@@ -175,7 +176,8 @@ for (const name of ADAPTERS) {
   console.log(`\n== adapter ${name} ==`);
   const mod = await import(`./${name}.js`);
   ok(typeof mod.id === 'string' && Array.isArray(mod.games) && typeof mod.label === 'string' && typeof mod.create === 'function', `exports id/games/label/create (${mod.id})`);
-  const inst = mod.create({ config: {}, emit, log, getState, patch: async () => {} });
+  const inst = mod.create({ config: {}, emit, log, getState, patch: async () => {}, capture: (payload) => { (captured[name] ||= []).push(payload); } });
+  if (['cs2gsi', 'dota2gsi', 'rlstats', 'lolclient', 'apexlive'].includes(name)) ok(mod.capturable === true, 'offers "Record raw game data" (capturable)');
   ok(typeof inst.start === 'function' && typeof inst.stop === 'function' && typeof inst.status === 'function', 'instance has start/stop/status');
   if (typeof mod.install === 'function') {
     const out = mod.install({ config: {}, getState });
@@ -190,6 +192,7 @@ for (const name of ADAPTERS) {
     ok((await post(7701, { ...CS2_PAYLOAD, auth: { token: 'wrong' } })) === 401, 'rejects bad token with 401');
     ok((await post(7701, CS2_PAYLOAD)) === 200, 'accepts good token');
     await sleep(50);
+    ok(captured.cs2gsi?.length === 1 && captured.cs2gsi[0].map?.name === 'de_mirage', `capture() saw the accepted payload as sent, not the 401 one (${captured.cs2gsi?.length ?? 0})`);
     const l = last.cs2gsi;
     ok(l && l.mapName === 'Mirage' && l.scoreA === 7 && l.scoreB === 4 && l.round === 12 && l.phase === 'live', `parsed map/score/round (${l?.mapName} ${l?.scoreA}-${l?.scoreB} r${l?.round} ${l?.phase})`);
     ok(l && l.bomb.state === 'planted' && l.bomb.countdown === 28 && l.players[0].weapon === 'AK-47' && l.players[1].alive === false, `bomb + weapons + alive (${JSON.stringify(l?.bomb)} ${l?.players[0].weapon})`);
@@ -361,6 +364,79 @@ for (const name of ADAPTERS) {
   console.log('   status after stop: ', JSON.stringify(inst.status()));
   const port = { cs2gsi: 7701, dota2gsi: 7702, apexlive: 7777 }[name];
   if (port) ok(await portFree(port), `port ${port} released after stop()`);
+}
+
+// ---- Steam install (_steam.js): find CS2 / Dota 2 and write the cfg ------------------------
+// A fake Steam tree in a temp dir: the Steam folder (library 0) has neither game, the second
+// library has CS2 (listed in libraryfolders.vdf) and Dota 2 (found by its appmanifest only).
+{
+  console.log('\n== steam install ==');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const steamMod = await import('./_steam.js');
+  const { parseRegQuery, parseVdf, parseLibraryFolders, findGameCfgDir, writeCfg, GSI_CFG_NAME, CFG_MARK } = steamMod;
+  const cs2 = await import('./cs2gsi.js');
+  const dota = await import('./dota2gsi.js');
+
+  ok(parseRegQuery('\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/program files (x86)/steam\r\n', 'SteamPath') === 'c:/program files (x86)/steam', 'reads SteamPath out of `reg query` output');
+  ok(parseRegQuery('ERROR: The system was unable to find the specified registry key or value.', 'SteamPath') === null, 'no key -> null, not a guess');
+  const acf = parseVdf('"AppState"\n{\n\t"appid"\t\t"730"\n\t"installdir"\t\t"Counter-Strike Global Offensive"\n\t// comment\n}\n');
+  ok(acf.AppState?.installdir === 'Counter-Strike Global Offensive', 'VDF: nested block, tabs and // comments');
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cta-steam-'));
+  try {
+    const steamDir = path.join(tmp, 'Steam');
+    const lib2 = path.join(tmp, 'Games', 'SteamLibrary');
+    fs.mkdirSync(path.join(steamDir, 'steamapps'), { recursive: true });
+    const vdf = `"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"${steamDir.replace(/\\/g, '\\\\')}"\n\t\t"apps"\n\t\t{\n\t\t\t"228980"\t\t"1"\n\t\t}\n\t}\n\t"1"\n\t{\n\t\t"path"\t\t"${lib2.replace(/\\/g, '\\\\')}"\n\t\t"apps"\n\t\t{\n\t\t\t"730"\t\t"38000000000"\n\t\t}\n\t}\n}\n`;
+    fs.writeFileSync(path.join(steamDir, 'steamapps', 'libraryfolders.vdf'), vdf);
+    const libs = parseLibraryFolders(vdf);
+    ok(libs.length === 2 && libs[1].path === lib2 && libs[1].apps.includes('730'), `libraryfolders.vdf: escaped Windows paths and app lists (${libs.map((l) => l.apps.join('+')).join(' | ')})`);
+    ok(parseLibraryFolders('"LibraryFolders"\n{\n\t"TimeNextStatsReport"\t"1"\n\t"1"\t"D:\\\\Games"\n}\n')[0]?.path === 'D:\\Games', 'the pre-2021 layout ("1" "D:\\\\Games") still reads');
+
+    // Not installed anywhere yet: every path tried is reported.
+    const miss = findGameCfgDir(cs2.steam, { roots: [steamDir] });
+    ok(!miss.ok && miss.tried.length >= 2 && miss.tried.some((p) => p.endsWith(path.join('game', 'csgo', 'cfg'))) && /not found/.test(miss.reason), `CS2 missing -> not ok, with every path it looked at (${miss.tried.length})`);
+    ok(!findGameCfgDir(cs2.steam, { roots: [] }).ok, 'no Steam at all -> not ok');
+
+    const csCfg = path.join(lib2, 'steamapps', 'common', 'Counter-Strike Global Offensive', 'game', 'csgo', 'cfg');
+    fs.mkdirSync(csCfg, { recursive: true });
+    const hit = findGameCfgDir(cs2.steam, { roots: [steamDir] });
+    ok(hit.ok && hit.dir === csCfg && hit.library === lib2, `CS2 found in the library that lists app 730 (${hit.dir})`);
+
+    // Dota: no app list entry, but an appmanifest naming its installdir; the gamestate_integration folder is ours to make.
+    fs.writeFileSync(path.join(lib2, 'steamapps', 'appmanifest_570.acf'), '"AppState"\n{\n\t"appid"\t"570"\n\t"installdir"\t"dota 2 beta"\n}\n');
+    const dotaCfg = path.join(lib2, 'steamapps', 'common', 'dota 2 beta', 'game', 'dota', 'cfg');
+    fs.mkdirSync(dotaCfg, { recursive: true });
+    const dHit = findGameCfgDir(dota.steam, { roots: [steamDir] });
+    ok(dHit.ok && dHit.dir === path.join(dotaCfg, 'gamestate_integration'), `Dota 2 found by appmanifest; target is cfg\\gamestate_integration (${dHit.dir})`);
+
+    // Write: UTF-8 without a BOM, then idempotent, then never over someone else's file.
+    const content = cs2.install({ config: {}, getState }).files[0].content;
+    const w1 = writeCfg({ dir: hit.dir, name: GSI_CFG_NAME, content });
+    const bytes = fs.readFileSync(path.join(csCfg, GSI_CFG_NAME));
+    ok(w1.ok && w1.written && bytes.toString('utf8') === content, 'writes the cfg into csgo\\cfg');
+    ok(!(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf), 'no UTF-8 BOM (the Notepad trap)');
+    ok(writeCfg({ dir: hit.dir, name: GSI_CFG_NAME, content: '\uFEFF' + content }).unchanged === true, 'a BOM in the content is dropped, so it is the same file - unchanged');
+    const w2 = writeCfg({ dir: hit.dir, name: GSI_CFG_NAME, content: content.replace('"token" "cta"', '"token" "new-tok"') });
+    ok(w2.ok && w2.written && !w2.backup && fs.readFileSync(path.join(csCfg, GSI_CFG_NAME), 'utf8').includes('new-tok'), 'our own older cfg is updated in place (a new token)');
+    ok(!fs.readdirSync(csCfg).some((f) => f.endsWith('.tmp')), 'no temp file left behind');
+
+    fs.writeFileSync(path.join(csCfg, GSI_CFG_NAME), '"Someone else"\n{\n "uri" "http://127.0.0.1:3000"\n}\n');
+    const w3 = writeCfg({ dir: hit.dir, name: GSI_CFG_NAME, content });
+    ok(!w3.ok && w3.foreign && fs.readFileSync(path.join(csCfg, GSI_CFG_NAME), 'utf8').startsWith('"Someone else"'), 'a file Clear to Air did not write is left alone and reported (foreign)');
+    const w4 = writeCfg({ dir: hit.dir, name: GSI_CFG_NAME, content, replace: true });
+    ok(w4.ok && w4.backup && fs.readFileSync(w4.backup, 'utf8').startsWith('"Someone else"') && fs.readFileSync(path.join(csCfg, GSI_CFG_NAME), 'utf8').startsWith(CFG_MARK), 'replace:true writes ours and keeps theirs as .old');
+    const w5 = writeCfg({ dir: hit.dir, name: 'autoexec.cfg', content: 'quit' });
+    ok(!w5.ok && !fs.existsSync(path.join(csCfg, 'autoexec.cfg')), 'any other file name is refused');
+
+    const d1 = writeCfg({ dir: dHit.dir, name: GSI_CFG_NAME, content: dota.install({ config: {}, getState }).files[0].content, createDir: true });
+    ok(d1.ok && fs.existsSync(path.join(dotaCfg, 'gamestate_integration', GSI_CFG_NAME)), 'Dota: creates gamestate_integration\\ and writes the cfg there');
+    ok(!findGameCfgDir({ ...cs2.steam, cfgDir: ['game', 'csgo', 'nope'] }, { roots: [steamDir] }).ok, 'a cfg folder that does not exist is never created for CS2 (we do not make game folders)');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 // ---- simulators ------------------------------------------------------------------------------

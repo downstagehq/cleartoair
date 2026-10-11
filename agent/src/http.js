@@ -345,8 +345,16 @@ function routes(ctx) {
       return { ok: true };
     }],
     ['GET', /^\/api\/adapters$/, () => registry.adapters()],
-    ['POST', /^\/api\/adapters\/([^/]+)\/(start|stop)$/, ({ params }) => (params[1] === 'start' ? registry.startAdapter(params[0]) : registry.stopAdapter(params[0]))],
+    // Start is remembered in agent/data/adapters.json and comes back after a restart; Stop forgets it.
+    ['POST', /^\/api\/adapters\/([^/]+)\/(start|stop)$/, ({ params, body }) => (params[1] === 'start' ? registry.startAdapter(params[0], { config: body.config }) : registry.stopAdapter(params[0]))],
+    // GET = the cfg text and the manual steps; POST = write the cfg into the game's
+    // cfg folder (CS2, Dota 2), or answer with the text and where it looked.
+    // Start/stop, both install routes and capture are local-only: none is in remote-policy.js.
     ['GET', /^\/api\/adapters\/([^/]+)\/install$/, ({ params }) => registry.installAdapter(params[0])],
+    ['POST', /^\/api\/adapters\/([^/]+)\/install$/, ({ params, body }) => registry.writeInstall(params[0], { replace: body.replace === true })],
+    // "Record raw game data": on/off and where the file is (agent/data/captures/).
+    ['GET', /^\/api\/adapters\/([^/]+)\/capture$/, ({ params }) => registry.captureStatus(params[0])],
+    ['POST', /^\/api\/adapters\/([^/]+)\/capture$/, ({ params, body }) => registry.setCapture(params[0], body.on === true)],
     ['POST', /^\/api\/adapters\/([^/]+)\/run$/, ({ params, body }) => registry.runAdapter(params[0], body)],
     ['GET', /^\/api\/sims$/, () => registry.sims()],
     ['POST', /^\/api\/sim\/([^/]+)\/(start|stop)$/, ({ params }) => (params[1] === 'start' ? registry.startSim(params[0]) : registry.stopSim(params[0]))],

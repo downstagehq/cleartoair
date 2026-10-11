@@ -268,6 +268,11 @@ export function create({ config, emit, log }) {
 export function install({ config }) {
   // optional: returns { files: [{ path, content }], instructions: "..." } e.g. the GSI cfg to write
 }
+// optional (0.3.1):
+export const steam = { appId: 730, name, installDir, cfgDir: ['game', 'csgo', 'cfg'], createLast?, restart };
+//   Install writes files[0] (only gamestate_integration_cleartoair.cfg) into that Steam game's cfg folder.
+export const capturable = true;
+//   create() also receives capture(payload); call it with every raw message ("Record raw game data").
 ```
 
 Team mapping: adapters report teams as the game sees them (CT/T, blue/orange,
@@ -350,7 +355,12 @@ GET  /api/packs                       [{id,name,short,maps,...}]  (pack.json con
 POST /api/game                        {game} switch pack (resets veto pool from pack.maps)
 GET  /api/adapters                    [{id,label,games,status,running}]
 POST /api/adapters/:id/start | stop
+    start is remembered in agent/data/adapters.json (non-secret config only) and restarted on boot; stop forgets it
 GET  /api/adapters/:id/install        install() output (files + instructions)
+POST /api/adapters/:id/install {replace?}  write the cfg into the game (steam adapters) -> {ok, found, written,
+                                      unchanged, foreign, backup, path, tried[], files, instructions}
+GET|POST /api/adapters/:id/capture {on}   "Record raw game data" -> {on, file, bytes, payloads, maxBytes, reason}
+    install and capture are local-only: no remote-policy rule, so a remote seat gets 403
 POST /api/sim/:game/start | stop
 GET  /api/obs                         bridge.status()
 POST /api/obs/scene   {name}
@@ -485,7 +495,7 @@ Owner: overlay packs builder. Files: `overlays/_shared/{tokens.css, skeleton.css
 Files: `agent/src/adapters/{_normalize,_gsi,cs2gsi,dota2gsi,rlstats,lolclient,apexlive,manual,startgg,_selftest}.js`, `agent/src/adapters/README.md`, `agent/src/sim/{_common,cs2,valorant,rocketleague,lol}.js`, `packs/{cs2,valorant,rocketleague,lol,dota2,apex,fgc,eafc}/pack.json`.
 
 - **Adapters emit already-normalized `live`.** Every adapter and sim builds a raw report (`sides.left/right` + players keyed by the game's side) and emits `normalize(raw, state)`. `normalize()` is **idempotent** (an object without `sides` passes through with defaults + fresh `updatedAt`), so the core's `emitFor()` calling it again is harmless.
-- **`create()` options**: `{ config, emit, log, state | getState, patch? }`. `state` may be the store (has `.get()`) or a snapshot; `getState` (fn) is accepted for tests. Ports resolve `config.PORTS.<name>` → `config.ports.<name>` → default. Bind host is `127.0.0.1`. The adapters read `config.gsiBind` / `config.apexBind`, but nothing in `config.js` sets them yet, so an observer on another PC cannot feed the agent - that needs a real setting plus a non-default token first. `log` may be the core's `{info(tag,msg)}` object or a plain function. `install()` accepts `{ config, state }` where `state` is a snapshot (reads `settings.gsiToken`).
+- **`create()` options**: `{ config, emit, log, state | getState, patch?, capture? }`. `capture(payload)` is passed to `capturable` adapters; it is a no-op until the Data tab switch is on, and strips tokens itself (agent/src/capture.js). `state` may be the store (has `.get()`) or a snapshot; `getState` (fn) is accepted for tests. Ports resolve `config.PORTS.<name>` → `config.ports.<name>` → default. Bind host is `127.0.0.1`. The adapters read `config.gsiBind` / `config.apexBind`, but nothing in `config.js` sets them yet, so an observer on another PC cannot feed the agent - that needs a real setting plus a non-default token first. `log` may be the core's `{info(tag,msg)}` object or a plain function. `install()` accepts `{ config, state }` where `state` is a snapshot (reads `settings.gsiToken`).
 - **A/B mapping order** (`_normalize.js`): 1) `settings.teamMap {A,B}` — token = side key (`CT`,`T`,`BLUE`,`ORANGE`,`RADIANT`,`DIRE`,`ATK`,`DEF`), team index (`0`/`1`, `team2`/`team3`, `order`/`chaos`) or a team-name substring; 2) game team names matched against `state.teams[series.teamA/B]` `.name/.short/.tag`; 3) sticky **first-seen left = A** per `live.source` (survives a halftime side swap); `settings.swapSides: true` flips the default. `resetFirstSeen(source?)` is exported — call it on `POST /api/game`.
 - **Extra `live` fields** (all merge-safe, no top-level nulls because `merge()` deletes null keys — `sideA/sideB` are `''` and `bomb` is `{state:'none', countdown:0}` when absent):
   - `live.names {A, B}` — team names as the game reports them (GSI cfg team names, RL team names, Dota team_name).

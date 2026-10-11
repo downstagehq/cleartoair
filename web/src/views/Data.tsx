@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeftRight, Check, Copy, Download, Play, Square } from 'lucide-react';
-import { Button, Empty, Field, Input, Panel, Pill, ScoreboardImport } from '../components';
+import { Button, Empty, Field, Input, Panel, Pill, ScoreboardImport, Toggle } from '../components';
 import { errText, get, post } from '../api';
 import { currentPack, liveAgeSeconds, toastErr, toastOk, useStore, type Sim } from '../store';
-import type { Adapter, AdapterInstall, LivePlayer } from '../types';
+import type { Adapter, AdapterInstall, AdapterInstallResult, CaptureStatus, LivePlayer } from '../types';
 
 const DEFAULT_SIMS: Sim[] = [
   { id: 'cs2', label: 'CS2' },
@@ -31,10 +31,145 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
+function bytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** The cfg text and the manual steps: what Install showed before it could save the file itself. */
+function ManualInstall({ install }: { install: AdapterInstall }) {
+  return (
+    <>
+      {install.instructions ? <div className="text-[12px] text-ink-2 whitespace-pre-wrap">{install.instructions}</div> : null}
+      {install.files?.map((f) => (
+        <div key={f.path} className="rounded-[6px] bg-bg-0 border border-line overflow-hidden">
+          <div className="flex items-center justify-between px-2 h-7 hairline-b">
+            <span className="mono text-[11px] text-ink-3 ellipsis">{f.path}</span>
+            <CopyBtn text={f.content} />
+          </div>
+          <pre className="mono text-[11px] text-ink-2 p-2 max-h-40 overflow-auto whitespace-pre">{f.content}</pre>
+        </div>
+      ))}
+      {!install.files?.length && !install.instructions ? <div className="text-[12px] text-ink-3">Nothing to install for this adapter.</div> : null}
+    </>
+  );
+}
+
+/** What POST /install did: saved, already there, someone else's file, or not found (then the text to save by hand). */
+function InstallResult({ r, onReplace, busy }: { r: AdapterInstallResult; onReplace: () => void; busy: boolean }) {
+  const [manual, setManual] = useState(!r.found || (!r.ok && !r.foreign));
+  return (
+    <>
+      {r.ok ? (
+        <div className="text-[12px] text-ink-2">
+          <div>
+            {r.unchanged ? 'Already in place, nothing to change:' : 'Saved:'} <span className="mono text-[11px] break-all">{r.path}</span>
+          </div>
+          {r.backup ? <div className="text-ink-3">The file that was there before is kept beside it as {r.backup.split(/[\\/]/).pop()}.</div> : null}
+          {r.restart ? <div className="mt-1">{r.unchanged ? 'If the game is not sending data yet: ' : 'Next: '}{r.restart} Then press Start on this card and spectate the match.</div> : null}
+        </div>
+      ) : r.foreign ? (
+        <div className="text-[12px] text-ink-2 flex flex-col gap-2">
+          <div>
+            {r.error}: <span className="mono text-[11px] break-all">{r.path}</span>
+          </div>
+          <div className="text-ink-3">Replacing it keeps the old one beside it as a .old file. Or leave it and save ours by hand.</div>
+          <div>
+            <Button size="sm" variant="primary" disabled={busy} onClick={onReplace}>
+              Replace it
+            </Button>
+          </div>
+        </div>
+      ) : !r.found ? (
+        <div className="text-[12px] text-ink-2">
+          <div>Clear to Air could not find {r.game ?? 'the game'} on this PC ({r.reason}). It looked in:</div>
+          <ul className="mono text-[11px] text-ink-3 mt-1">
+            {r.tried.map((p) => (
+              <li key={p} className="break-all">
+                {p}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1">Save the file below yourself, as the steps say.</div>
+        </div>
+      ) : (
+        <div className="text-[12px] text-ink-2">
+          Could not save it: {r.error}. Save the file below yourself, as the steps say.
+        </div>
+      )}
+      <button type="button" className="self-start text-[12px] text-ink-3 underline" onClick={() => setManual(!manual)}>
+        {manual ? 'Hide the file' : "I'll save it myself"}
+      </button>
+      {manual ? <ManualInstall install={r} /> : null}
+    </>
+  );
+}
+
+/** "Record raw game data": local operator only (the agent refuses a remote seat). */
+function CaptureSwitch({ a }: { a: Adapter }) {
+  const [cap, setCap] = useState<CaptureStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const on = !!cap?.on;
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      get<CaptureStatus>(`/api/adapters/${a.id}/capture`)
+        .then((s) => !stop && setCap(s))
+        .catch(() => {});
+    void load();
+    // The size climbs while it records; once it is off there is nothing to watch.
+    const t = on ? window.setInterval(load, 2000) : undefined;
+    return () => {
+      stop = true;
+      if (t) window.clearInterval(t);
+    };
+  }, [a.id, on]);
+  const flip = async (next: boolean) => {
+    setBusy(true);
+    try {
+      setCap(await post<CaptureStatus>(`/api/adapters/${a.id}/capture`, { on: next }));
+      toastOk(next ? `Recording raw ${a.label} data` : 'Recording stopped');
+    } catch (e) {
+      toastErr('Record raw game data', errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-1 pt-2 hairline-t">
+      <Toggle on={on} disabled={busy} onChange={(v) => void flip(v)} label="Record raw game data" />
+      {cap?.file ? (
+        <div className="flex items-center gap-2 min-w-0">
+          {/* The file name is the part that matters; the whole path is one Copy away. */}
+          <span className="mono text-[11px] text-ink-2 shrink-0" title={cap.file}>
+            {cap.file.split(/[\\/]/).pop()}
+          </span>
+          <span className="mono text-[11px] text-ink-4 ellipsis min-w-0 flex-1" title={cap.file}>
+            in {cap.dir}
+          </span>
+          <CopyBtn text={cap.file} />
+        </div>
+      ) : null}
+      {cap?.file ? (
+        <div className="mono text-[11px] text-ink-3">
+          {bytes(cap.bytes)} of {bytes(cap.maxBytes)} · {cap.payloads} payload{cap.payloads === 1 ? '' : 's'}
+          {!on && cap.reason ? ` · stopped: ${cap.reason}` : ''}
+        </div>
+      ) : null}
+      <div className="text-[11px] text-ink-3">
+        Saves what the game sends, for a "Real payload" issue. Tokens are taken out; player names and account IDs are not, so anonymise before you share it.
+      </div>
+    </div>
+  );
+}
+
 function AdapterCard({ a }: { a: Adapter }) {
   const [busy, setBusy] = useState(false);
-  const [install, setInstall] = useState<AdapterInstall | null | 'loading'>(null);
+  const [install, setInstall] = useState<AdapterInstall | AdapterInstallResult | null | 'loading'>(null);
   const live = useStore((s) => s.state?.live);
+  // Install and the capture switch write files on the broadcast PC: never offered to a remote seat.
+  const seat = useStore((s) => s.seat);
   const age = live?.source === a.id ? liveAgeSeconds(live) : null;
   const tone = a.running ? (a.status?.connected ? 'ok' : 'warn') : 'idle';
   const label = a.running ? (a.status?.connected ? 'connected' : 'waiting') : 'stopped';
@@ -50,14 +185,21 @@ function AdapterCard({ a }: { a: Adapter }) {
       setBusy(false);
     }
   };
-  const loadInstall = async () => {
-    if (install && install !== 'loading') return setInstall(null);
-    setInstall('loading');
+  const loadInstall = async (replace = false) => {
+    if (!replace && install && install !== 'loading') return setInstall(null);
+    if (!replace) setInstall('loading');
+    setBusy(true);
     try {
-      setInstall(await get<AdapterInstall>(`/api/adapters/${a.id}/install`));
+      if (a.autoInstall) {
+        const r = await post<AdapterInstallResult>(`/api/adapters/${a.id}/install`, { replace });
+        setInstall(r);
+        if (r.ok && !r.unchanged) toastOk(`${a.label}: config saved`, r.restart);
+      } else setInstall(await get<AdapterInstall>(`/api/adapters/${a.id}/install`));
     } catch (e) {
       setInstall(null);
       toastErr('No install steps', errText(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -82,26 +224,19 @@ function AdapterCard({ a }: { a: Adapter }) {
         <Button size="sm" variant={a.running ? 'danger' : 'primary'} icon={a.running ? <Square size={12} /> : <Play size={12} />} disabled={busy} onClick={() => void toggle()}>
           {a.running ? 'Stop' : 'Start'}
         </Button>
-        <Button size="sm" variant="ghost" icon={<Download size={12} />} onClick={() => void loadInstall()}>
-          Install
-        </Button>
+        {!seat ? (
+          <Button size="sm" variant="ghost" icon={<Download size={12} />} disabled={busy} onClick={() => void loadInstall()}>
+            Install
+          </Button>
+        ) : null}
       </div>
-      {install === 'loading' ? <div className="text-[12px] text-ink-3">Loading…</div> : null}
+      {install === 'loading' ? <div className="text-[12px] text-ink-3">{a.autoInstall ? 'Looking for the game…' : 'Loading…'}</div> : null}
       {install && install !== 'loading' ? (
         <div className="flex flex-col gap-2 mt-1 pt-2 hairline-t">
-          {install.instructions ? <div className="text-[12px] text-ink-2 whitespace-pre-wrap">{install.instructions}</div> : null}
-          {install.files?.map((f) => (
-            <div key={f.path} className="rounded-[6px] bg-bg-0 border border-line overflow-hidden">
-              <div className="flex items-center justify-between px-2 h-7 hairline-b">
-                <span className="mono text-[11px] text-ink-3 ellipsis">{f.path}</span>
-                <CopyBtn text={f.content} />
-              </div>
-              <pre className="mono text-[11px] text-ink-2 p-2 max-h-40 overflow-auto whitespace-pre">{f.content}</pre>
-            </div>
-          ))}
-          {!install.files?.length && !install.instructions ? <div className="text-[12px] text-ink-3">Nothing to install for this adapter.</div> : null}
+          {'tried' in install ? <InstallResult r={install} busy={busy} onReplace={() => void loadInstall(true)} /> : <ManualInstall install={install} />}
         </div>
       ) : null}
+      {a.capturable && !seat ? <CaptureSwitch a={a} /> : null}
     </div>
   );
 }
