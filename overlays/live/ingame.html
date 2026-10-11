@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clear to Air — In-game</title>
+<link rel="preload" href="/overlays/_shared/fonts/BarlowCondensed-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/overlays/_shared/tokens.css">
+<link rel="stylesheet" href="/overlays/_shared/skeleton.css">
+<!-- Title-agnostic page: core.js points this at /packs/<state.game>/overlay/skin.css
+     and re-renders whenever the desk changes title. Add THIS URL to OBS, once. -->
+<link id="skin" rel="stylesheet" href="">
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<script src="/overlays/_shared/stateBuffer.js"></script>
+<script src="/overlays/_shared/core.js"></script>
+<script src="/overlays/_shared/render.js"></script>
+<script>
+  CTA.connect({ page: 'ingame' });
+  CTA.render.ingame({});
+</script>
+</body>
+</html>

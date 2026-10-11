@@ -1,0 +1,33 @@
+# cleartoair-room - the hosted control room's relay.
+#
+# Deploy:  cd relay && node ../tools/relay-assets.mjs && npx wrangler deploy
+# See relay/README.md. Nothing here costs money on the Workers free plan:
+# static asset requests are free and unmetered, and a Durable Object that is
+# sitting on an idle rig connection hibernates (so it is not billed for the
+# wall-clock time a rig stays paired all weekend).
+
+name = "cleartoair-room"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# The control room is a single-page app: any path it owns must come back as
+# index.html. The Worker already claims /api, /ws, /packs, /j and /waiting
+# before the assets are consulted.
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/ws", "/packs/*", "/j/*", "/waiting", "/healthz", "/__agent", "/__health"]
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# SQLite-backed Durable Objects are the ones available on the free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[observability]
+enabled = true

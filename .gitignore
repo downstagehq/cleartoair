@@ -1,0 +1,31 @@
+node_modules/
+web/dist/
+agent/data/
+*.log
+.DS_Store
+reports/
+.vercel
+.env
+.env.*
+
+# Team logos fetched from Liquipedia are the teams' trademarks. Fine to use
+# locally to identify a team that is playing; not ours to redistribute, so they
+# stay out of the repo the same way agent/data does. Your own event's team logos
+# are yours - commit those with `git add -f packs/<game>/assets/teams/<file>`.
+packs/*/assets/teams/
+
+# build outputs
+dist/
+tools/launcher/out/
+tools/launcher/icon.ico
+tools/launcher/icon-256.png
+
+# Player photos cached from Liquipedia - same rule as team logos
+packs/_players/
+
+# The relay's asset folder is a staged copy of web/dist (tools/relay-assets.mjs).
+relay/public/
+relay/.wrangler/
+
+# wrangler dev state for the cleartoair.com Worker
+site/.wrangler/

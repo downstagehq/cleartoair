@@ -1,0 +1,7 @@
+/* Counter-Strike 2 — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* CS2 — amber plates, tight chamfer, CT/T side chips coloured like the game HUD */
+:root { --chamfer: 12px; }
+[data-game="cs2"] .chip.dark { background: rgba(0,0,0,.6); }
+[data-game="cs2"] .bug-sub .cell.a .chip.dark { color: #7EB6FF; }
+[data-game="cs2"] .bug-sub .cell.b .chip.dark { color: #FFB86B; }

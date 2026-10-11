@@ -1,0 +1,6 @@
+/* Dota 2 — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* Dota 2 — Radiant/Dire: side chips take the faction colours */
+:root { --chamfer: 8px; }
+[data-game="dota2"] .bug-sub .cell.a .chip.dark { color: #92A525; }
+[data-game="dota2"] .bug-sub .cell.b .chip.dark { color: #C23C2A; }

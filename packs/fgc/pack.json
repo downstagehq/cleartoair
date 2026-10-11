@@ -1,0 +1,30 @@
+{
+  "id": "fgc",
+  "name": "Fighting Games",
+  "short": "FGC",
+  "sides": ["P1", "P2"],
+  "roundsToWin": 2,
+  "defaultFormat": "FT2",
+  "formats": ["FT2", "FT3", "FT4"],
+  "maps": [
+    { "id": "stage-random",   "name": "Random Stage",   "art": "assets/maps/stage-random.jpg",   "active": true },
+    { "id": "stage-training", "name": "Training Stage", "art": "assets/maps/stage-training.jpg", "active": true },
+    { "id": "stage-arena",    "name": "Arena",          "art": "assets/maps/stage-arena.jpg",    "active": true },
+    { "id": "stage-street",   "name": "Street",         "art": "assets/maps/stage-street.jpg",   "active": true },
+    { "id": "stage-rooftop",  "name": "Rooftop",        "art": "assets/maps/stage-rooftop.jpg",  "active": true },
+    { "id": "stage-dojo",     "name": "Dojo",           "art": "assets/maps/stage-dojo.jpg",     "active": true }
+  ],
+  "characterSets": {"Street Fighter 6": ["A.K.I.", "Akuma", "Blanka", "Cammy", "Chun-Li", "Dee Jay", "Dhalsim", "E. Honda", "Ed", "Elena", "Guile", "Jamie", "JP", "Juri", "Ken", "Kimberly", "Lily", "Luke", "M. Bison", "Mai", "Manon", "Marisa", "Rashid", "Ryu", "Sagat", "Terry", "Zangief"], "Tekken 8": ["Alisa", "Anna", "Asuka", "Azucena", "Bryan", "Claudio", "Devil Jin", "Dragunov", "Eddy", "Fahkumram", "Feng", "Heihachi", "Hwoarang", "Jack-8", "Jin", "Jun", "Kazuya", "King", "Kuma", "Lars", "Law", "Lee", "Leo", "Leroy", "Lidia", "Lili", "Nina", "Panda", "Paul", "Raven", "Reina", "Shaheen", "Steve", "Victor", "Xiaoyu", "Yoshimitsu", "Zafina"], "Guilty Gear Strive": ["A.B.A", "Anji Mito", "Asuka R", "Axl Low", "Baiken", "Bedman?", "Bridget", "Chipp Zanuff", "Elphelt", "Faust", "Giovanna", "Goldlewis", "Happy Chaos", "I-No", "Jack-O'", "Johnny", "Ky Kiske", "Leo Whitefang", "May", "Millia Rage", "Nagoriyuki", "Potemkin", "Queen Dizzy", "Ramlethal", "Sin Kiske", "Slayer", "Sol Badguy", "Testament", "Unika", "Venom", "Zato-1"], "Mortal Kombat 1": ["Ashrah", "Baraka", "Ermac", "General Shao", "Geras", "Havik", "Johnny Cage", "Kenshi", "Kitana", "Kung Lao", "Li Mei", "Liu Kang", "Mileena", "Nitara", "Noob Saibot", "Raiden", "Rain", "Reiko", "Reptile", "Scorpion", "Sektor", "Shang Tsung", "Sindel", "Smoke", "Sub-Zero", "Takeda", "Tanya"]},
+  "roles": ["PLAYER"],
+  "rosterSize": 1,
+  "liquipedia": "fighters",
+  "adapters": ["manual", "startgg"],
+  "sims": ["fgc"],
+  "stats": { "scoreboardColumns": ["games", "rounds", "perfects"], "mvpStat": "games" },
+  "caps": {"veto": false, "draft": false, "standings": false, "set": true, "games": false, "matchStats": false, "maps": false, "sides": false, "rounds": true, "halves": false, "series": true, "headToHead": true, "cards": ["none", "vs", "set", "roster", "bracket", "scoreboard", "mvp", "h2h", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "fgc" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#8B5CF6", "secondary": "#0B0D10" },
+  "capture": { "kind": "monitor_capture", "window": "" },
+  "notes": "Game-agnostic fighting-game pack (SF6, Tekken 8, GGST, MK1...). Score = games won in a first-to-N set; rounds via the Match tab or the fgc simulator. Bracket import from start.gg. characterSets are suggestion lists per title, not whitelists - DLC lands faster than a pack file, so the set builder accepts any name."
+}

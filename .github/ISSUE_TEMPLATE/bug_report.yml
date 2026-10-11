@@ -1,0 +1,93 @@
+name: Bug report
+description: Something in Clear to Air did not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems do not belong here: see SECURITY.md.
+
+        **Before you paste anything:** remove passwords, tokens and invite links. Logs and
+        state can contain the OBS password, the GSI token, the start.gg token, the VDO.Ninja
+        password, remote-seat invite links and room ids. Replace real team and player names
+        if you do not want them public.
+  - type: input
+    id: version
+    attributes:
+      label: Clear to Air version
+      description: Shown in the control room's status bar.
+      placeholder: "0.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - Portable Windows build (Clear to Air.exe)
+        - From source (Clear to Air.cmd or npm start)
+        - Hosted control room (remote seat)
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - Counter-Strike 2
+        - Dota 2
+        - League of Legends
+        - Rocket League
+        - Apex Legends
+        - VALORANT
+        - EA SPORTS FC
+        - Fighting games
+        - Not game-specific
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Data source
+      description: Which adapter or simulator was running (Data tab), or "manual".
+      placeholder: "cs2gsi / sim:cs2 / manual"
+  - type: input
+    id: obs
+    attributes:
+      label: OBS Studio version
+      placeholder: "e.g. 31.0.2, or: OBS not involved"
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: "e.g. Windows 11 23H2"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Started the CS2 simulator
+        2. Armed the VS card and pressed TAKE
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: |
+        Portable build: launcher.log next to Clear to Air.exe, and app\agent\data\agent.log
+        (tray menu: Open log). From source: the agent window, or agent\data\agent.log.
+        Paste only the lines around the problem. REMOVE tokens, passwords and invite links first.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Of the control room or the overlay, if it is visual.

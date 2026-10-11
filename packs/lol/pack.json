@@ -1,0 +1,26 @@
+{
+  "id": "lol",
+  "name": "League of Legends",
+  "short": "LoL",
+  "sides": ["BLUE", "RED"],
+  "roundsToWin": 0,
+  "defaultFormat": "BO3",
+  "formats": ["BO1", "BO3", "BO5"],
+  "maps": [
+    { "id": "map11", "name": "Summoner's Rift", "art": "assets/maps/summoners-rift.jpg", "active": true },
+    { "id": "map12", "name": "Howling Abyss",   "art": "assets/maps/howling-abyss.jpg",   "active": false }
+  ],
+  "champions": ["Aatrox", "Ahri", "Akali", "Alistar", "Amumu", "Annie", "Ashe", "Azir", "Bard", "Blitzcrank", "Braum", "Caitlyn", "Camille", "Corki", "Darius", "Draven", "Ekko", "Elise", "Ezreal", "Fiora", "Gnar", "Gragas", "Graves", "Gwen", "Hwei", "Irelia", "Janna", "Jarvan IV", "Jax", "Jayce", "Jhin", "Jinx", "K'Sante", "Kai'Sa", "Karma", "Kassadin", "Kennen", "Khazix", "Kindred", "Leblanc", "Lee Sin", "Leona", "Lucian", "Lulu", "Malphite", "Maokai", "Milio", "Nautilus", "Neeko", "Nidalee", "Nocturne", "Olaf", "Orianna", "Ornn", "Poppy", "Rakan", "Rell", "Renata Glasc", "Renekton", "Rengar", "Rumble", "Ryze", "Samira", "Sejuani", "Senna", "Sett", "Sion", "Skarner", "Sylas", "Syndra", "Thresh", "Tristana", "Twisted Fate", "Udyr", "Varus", "Vayne", "Vi", "Viego", "Viktor", "Vladimir", "Wukong", "Xayah", "Xin Zhao", "Yasuo", "Yone", "Zeri", "Ziggs", "Zoe", "Zyra"],
+  "roles": ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"],
+  "rosterSize": 5,
+  "liquipedia": "leagueoflegends",
+  "adapters": ["lolclient", "manual"],
+  "sims": ["lol"],
+  "stats": { "scoreboardColumns": ["k", "d", "a", "cs", "gold", "dmg"], "mvpStat": "kda" },
+  "caps": {"veto": false, "draft": true, "standings": false, "set": false, "games": false, "matchStats": false, "maps": false, "sides": true, "rounds": false, "halves": false, "series": true, "headToHead": true, "cards": ["none", "vs", "draft", "roster", "bracket", "scoreboard", "mvp", "h2h", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "kills" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#C8AA6E", "secondary": "#0A1428" },
+  "capture": { "kind": "game_capture", "window": "League of Legends (TM) Client:RiotWindowClass:League of Legends.exe" },
+  "notes": "Live Client Data API is served by the game client on :2999 while a game is running. Riot permits broadcast overlays (OBS) but not in-game overlays. Sides are named blue/red; the API calls them ORDER/CHAOS."
+}

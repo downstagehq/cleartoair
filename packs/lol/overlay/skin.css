@@ -1,0 +1,6 @@
+/* League of Legends — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* LoL — gold hairlines, objectives strip in serif-less small caps */
+:root { --chamfer: 8px; }
+[data-game="lol"] .objs .o .k { color: #C8AA6E; }
+[data-game="lol"] .bug .mid .k { color: #C8AA6E; }

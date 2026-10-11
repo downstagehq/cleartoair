@@ -1,0 +1,25 @@
+{
+  "id": "dota2",
+  "name": "Dota 2",
+  "short": "DOTA",
+  "sides": ["RADIANT", "DIRE"],
+  "roundsToWin": 0,
+  "defaultFormat": "BO3",
+  "formats": ["BO1", "BO3", "BO5"],
+  "maps": [
+    { "id": "dota", "name": "The Map", "art": "assets/maps/dota.jpg", "active": true }
+  ],
+  "champions": ["Anti-Mage", "Axe", "Bane", "Batrider", "Beastmaster", "Bloodseeker", "Bounty Hunter", "Brewmaster", "Bristleback", "Broodmother", "Centaur Warrunner", "Chen", "Clinkz", "Clockwerk", "Crystal Maiden", "Dark Seer", "Dark Willow", "Dawnbreaker", "Dazzle", "Death Prophet", "Doom", "Dragon Knight", "Drow Ranger", "Earth Spirit", "Earthshaker", "Elder Titan", "Ember Spirit", "Enchantress", "Enigma", "Faceless Void", "Grimstroke", "Gyrocopter", "Hoodwink", "Huskar", "Invoker", "Jakiro", "Juggernaut", "Keeper of the Light", "Kunkka", "Legion Commander", "Leshrac", "Lich", "Lifestealer", "Lina", "Lion", "Lone Druid", "Luna", "Lycan", "Magnus", "Marci", "Mars", "Medusa", "Meepo", "Mirana", "Monkey King", "Morphling", "Muerta", "Naga Siren", "Nature's Prophet", "Necrophos", "Night Stalker", "Nyx Assassin", "Ogre Magi", "Omniknight", "Oracle", "Outworld Destroyer", "Pangolier", "Phantom Assassin", "Phantom Lancer", "Phoenix", "Primal Beast", "Puck", "Pudge", "Pugna", "Queen of Pain", "Razor", "Riki", "Rubick", "Sand King", "Shadow Demon", "Shadow Fiend", "Shadow Shaman", "Silencer", "Skywrath Mage", "Slardar", "Slark", "Snapfire", "Sniper", "Spectre", "Spirit Breaker", "Storm Spirit", "Sven", "Techies", "Templar Assassin", "Terrorblade", "Tidehunter", "Timbersaw", "Tinker", "Tiny", "Treant Protector", "Troll Warlord", "Tusk", "Underlord", "Undying", "Ursa", "Vengeful Spirit", "Venomancer", "Viper", "Visage", "Void Spirit", "Warlock", "Weaver", "Windranger", "Winter Wyvern", "Witch Doctor", "Wraith King", "Zeus"],
+  "roles": ["CARRY", "MID", "OFFLANE", "SOFT SUPPORT", "HARD SUPPORT"],
+  "rosterSize": 5,
+  "liquipedia": "dota2",
+  "adapters": ["dota2gsi", "manual"],
+  "sims": ["dota2"],
+  "stats": { "scoreboardColumns": ["k", "d", "a", "lh", "gpm", "xpm", "nw"], "mvpStat": "nw" },
+  "caps": {"veto": false, "draft": true, "standings": false, "set": false, "games": false, "matchStats": false, "maps": false, "sides": true, "rounds": false, "halves": false, "series": true, "headToHead": true, "cards": ["none", "vs", "draft", "roster", "bracket", "scoreboard", "mvp", "h2h", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "kills" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#A53A26", "secondary": "#12151A" },
+  "capture": { "kind": "game_capture", "window": "Dota 2:SDL_app:dota2.exe" },
+  "notes": "GSI requires the -gamestateintegration launch option and the cfg in game\\dota\\cfg\\gamestate_integration\\. Spectate the match for per-team dicts. The dota2 simulator drives kills, net worth, towers and Roshan for rehearsal."
+}

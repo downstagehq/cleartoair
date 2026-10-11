@@ -1,0 +1,12 @@
+# The landing page is the only thing Vercel builds (Root Directory = site).
+# Everything else is the desktop product and does not belong in the upload.
+agent/
+web/
+packs/
+overlays/
+docs/
+reports/
+node_modules/
+*.zip
+Clear to Air.cmd
+CONTRACTS.md

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clear to Air — overlay preview</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  html, body { width: auto; height: auto; overflow: auto; background: var(--bg-0); color: var(--ink); font: 13px/1.45 var(--font-ui); }
+  .top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .top .t { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .06em; text-transform: uppercase; margin-right: 10px; }
+  select, button { height: 30px; padding: 0 12px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; font: 500 12px var(--font-ui); cursor: pointer; }
+  button:hover { background: var(--bg-3); } button.on { background: var(--brass); color: #111; border-color: var(--brass); }
+  .grp { display: flex; gap: 4px; align-items: center; padding: 3px; border: 1px solid var(--line); border-radius: 8px; }
+  .grp .l { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); padding: 0 6px; }
+  .frame { margin: 16px; width: 960px; height: 540px; position: relative; overflow: hidden; border: 1px solid var(--line-strong);
+    background-color: #1a1e25; background-image: linear-gradient(45deg, #23282f 25%, transparent 25%), linear-gradient(-45deg, #23282f 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #23282f 75%), linear-gradient(-45deg, transparent 75%, #23282f 75%);
+    background-size: 40px 40px; background-position: 0 0, 0 20px, 20px -20px, -20px 0; }
+  .frame iframe { width: 1920px; height: 1080px; border: 0; transform: scale(.5); transform-origin: 0 0; background: transparent; }
+  .frame .safe { position: absolute; left: 48px; top: 27px; right: 48px; bottom: 27px; border: 1px dashed rgba(255,255,255,.12); pointer-events: none; }
+  .st { padding: 0 16px 16px; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+  a { color: var(--brass); }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="t">Clear to Air · preview</div>
+  <select id="page"></select>
+  <div class="grp"><span class="l">ingame</span>
+    <button data-patch='{"show":{"bug":true}}' data-off='{"show":{"bug":false}}' data-key="show.bug">bug</button>
+    <button data-patch='{"show":{"lowerThird":{"on":true,"name":"Casey Diaz","role":"CASTER","handle":"@caseydiaz"}}}' data-off='{"show":{"lowerThird":{"on":false}}}' data-key="show.lowerThird.on">lower third</button>
+    <button data-patch='{"show":{"ticker":true}}' data-off='{"show":{"ticker":false}}' data-key="show.ticker">ticker</button>
+    <button data-patch='{"show":{"corner":true}}' data-off='{"show":{"corner":false}}' data-key="show.corner">corner</button>
+    <button id="to">timeout</button>
+    <button id="livetoggle">live/series</button>
+  </div>
+  <div class="grp"><span class="l">card</span>
+    <button data-card="none">none</button><button data-card="vs">vs</button><button data-card="veto">veto</button><button data-card="roster">roster</button>
+    <button data-card="bracket">bracket</button><button data-card="scoreboard">scoreboard</button><button data-card="mvp">mvp</button><button data-card="h2h">h2h</button><button data-card="schedule">schedule</button>
+  </div>
+  <div class="grp"><span class="l">standby</span>
+    <button data-patch='{"show":{"standby":{"mode":"countdown"}}}' id="cd">countdown 5m</button>
+    <button data-patch='{"show":{"standby":{"mode":"brb"}}}'>brb</button>
+    <button data-patch='{"show":{"standby":{"mode":"outro"}}}'>outro</button>
+  </div>
+  <div class="grp"><span class="l">brand</span>
+    <button data-patch='{"event":{"brand":{"primary":"#FDD302","font":"barlow"}}}'>gold</button>
+    <button data-patch='{"event":{"brand":{"primary":"#3B82F6","font":"bebas"}}}'>blue/bebas</button>
+    <button data-patch='{"event":{"brand":{"primary":"#FF4655","font":"barlow"}}}'>red</button>
+  </div>
+  <button id="reload">reload frame</button>
+</div>
+<div class="frame"><iframe id="f" src="about:blank"></iframe><div class="safe"></div></div>
+<div class="st" id="st">state: –</div>
+<script>
+(function () {
+  var PACKS = ['cs2', 'valorant', 'rocketleague', 'lol', 'dota2', 'apex', 'fgc', 'eafc'];
+  var PAGES = ['ingame', 'cards', 'standby', 'desk?who=casters', 'desk?who=hosts'];
+  var sel = document.getElementById('page'), f = document.getElementById('f');
+  PACKS.forEach(function (p) { PAGES.forEach(function (pg) { var o = document.createElement('option'); o.value = p + '/' + pg; o.textContent = p + ' / ' + pg; sel.appendChild(o); }); });
+  var want = new URLSearchParams(location.search).get('page') || 'valorant/ingame';
+  sel.value = PAGES.some(function (pg) { return want.endsWith(pg); }) ? want : want;
+  if (!sel.value) sel.value = 'valorant/ingame';
+  function load() {
+    var v = sel.value, path = v.split('?')[0], q = v.indexOf('?') > 0 ? '?' + v.split('?')[1] : '';
+    // preview=1: this frame must not count as a live OBS graphic in preflight
+    f.src = '/packs/' + path.replace('/', '/overlay/') + '.html' + (q ? q + '&' : '?') + 'preview=1';
+    history.replaceState(null, '', '?page=' + encodeURIComponent(v));
+    // switch the fake state to the pack so the bug style + sides match
+    patch({ game: path.split('/')[0] });
+  }
+  sel.onchange = load;
+  document.getElementById('reload').onclick = function () { f.src = f.src; };
+  function patch(p) { return fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }).then(refresh); }
+  function get(o, k) { return k.split('.').reduce(function (a, x) { return a == null ? a : a[x]; }, o); }
+  var st = {};
+  function refresh() {
+    return fetch('/api/state', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (s) {
+      st = s;
+      document.querySelectorAll('button[data-key]').forEach(function (b) { b.classList.toggle('on', !!get(s, b.dataset.key)); });
+      document.querySelectorAll('button[data-card]').forEach(function (b) { b.classList.toggle('on', (s.show || {}).card === b.dataset.card); });
+      document.getElementById('st').textContent = 'state: game=' + s.game + ' card=' + (s.show || {}).card + ' bug=' + (s.show || {}).bug + ' live.connected=' + !!(s.live && s.live.connected) + ' · agent ' + location.host;
+    }).catch(function () { document.getElementById('st').textContent = 'state: agent not reachable at ' + location.host; });
+  }
+  document.querySelectorAll('button[data-patch]').forEach(function (b) {
+    b.onclick = function () {
+      var on = b.dataset.key ? !!get(st, b.dataset.key) : false;
+      var p = JSON.parse(on && b.dataset.off ? b.dataset.off : b.dataset.patch);
+      if (b.id === 'cd') p.show.standby.targetAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      patch(p);
+    };
+  });
+  document.querySelectorAll('button[data-card]').forEach(function (b) { b.onclick = function () { patch({ show: { card: b.dataset.card } }); }; });
+  document.getElementById('to').onclick = function () {
+    patch(get(st, 'show.timeout') ? { show: { timeout: null } } : { show: { timeout: { reason: 'TACTICAL TIMEOUT', seconds: 60, startedAt: new Date().toISOString() } } });
+  };
+  document.getElementById('livetoggle').onclick = function () { patch({ live: { connected: !get(st, 'live.connected') } }); };
+  refresh().then(load);
+})();
+</script>
+</body>
+</html>

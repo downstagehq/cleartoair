@@ -1,0 +1,109 @@
+/* CLEAR TO AIR — overlay design tokens (shared by every pack).
+   Canvas is always 1920x1080, body transparent (OBS composites over the scene).
+   Title-safe: 96,54 -> 1824,1026.
+
+   Precedence for colour/font (lowest -> highest):
+     1. defaults here                      (brass on graphite)
+     2. packs/<game>/overlay/skin.css      (pack theme, sets the same vars on :root)
+     3. CTA.applyBrand(state)              (event brand, inline style on :root)
+     4. team.color                         (--team, inline on the team plate)
+   Fonts are bundled in ./fonts — never a CDN; overlays must work offline. */
+
+@font-face { font-family: 'Barlow Condensed'; src: url('fonts/BarlowCondensed-SemiBold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: block; }
+@font-face { font-family: 'Barlow Condensed'; src: url('fonts/BarlowCondensed-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: 'Inter'; src: url('fonts/Inter-Variable.ttf') format('truetype'); font-weight: 100 900; font-style: normal; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/JetBrainsMono-Variable.ttf') format('truetype'); font-weight: 100 800; font-style: normal; font-display: block; }
+@font-face { font-family: 'Bebas Neue'; src: url('fonts/BebasNeue-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: block; }
+
+:root {
+  /* brand (event) — overwritten by CTA.applyBrand */
+  --brand-primary: #D9B25A;
+  --brand-secondary: #0B0D10;
+  --brand-accent: #FFFFFF;
+  --brand-font: 'Barlow Condensed', 'Bebas Neue', Impact, sans-serif;
+  --brand-font-weight: 700;          /* Bebas Neue only ships 400 — applyBrand flips this */
+  --brand-logo: none;                /* url(...) set by applyBrand */
+  --brand-primary-rgb: 217, 178, 90; /* for rgba() glows; applyBrand keeps in sync */
+
+  /* team colour on a plate — set inline by the renderers */
+  --team: var(--brand-primary);
+
+  /* graphite ladder (DESIGN.md) */
+  --bg-0: #0B0D10; --bg-1: #12151A; --bg-2: #181C22; --bg-3: #1F242C;
+  --line: rgba(255,255,255,.07); --line-strong: rgba(255,255,255,.14);
+  --ink: #E8ECF1; --ink-2: #A9B3C1; --ink-3: #6E7A8A; --ink-4: #45505E;
+  --warn: #FFB020; --fail: #FF5A5A; --ok: #3DDC84;
+
+  /* plate geometry */
+  --plate-bg: rgba(11,13,16,.92);
+  --plate-bg-2: rgba(24,28,34,.92);
+  --chamfer: 14px;
+  --edge: 4px;                       /* brand edge */
+  --team-edge: 6px;                  /* team edge */
+  --scrim: rgba(6,8,11,.6);
+
+  /* type */
+  --font-display: var(--brand-font);
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* CS2 side colours. Deliberately NOT team colours: the GSI round_wins feed only
+     knows sides, they swap at half time, and CT/T is what the game itself uses.
+     A skin may override them. */
+  --side-ct: #5B8DEF;
+  --side-t:  #E0A33A;
+
+  /* safe area */
+  --safe-x: 96px; --safe-y: 54px;
+
+  /* motion */
+  --ease: cubic-bezier(.23, 1, .32, 1);
+  --t-fx-o: .32s; --t-fx-t: .42s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 1920px; height: 1080px; overflow: hidden;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+img { display: block; }
+img:not([src]), img[src=""] { visibility: hidden; }
+.stage { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+
+/* ---------- motion ----------
+   .fx animates opacity + transform. NEVER position a .fx element with
+   translate(-50%): use left: calc(50% - w/2). The pending hide timer is
+   cancelled on show inside CTA.show (see core.js). Stagger children with
+   style="--i:N" on .fx-stagger > * */
+.fx { opacity: 0; transition: opacity var(--t-fx-o) var(--ease), transform var(--t-fx-t) var(--ease); }
+.fx.in { opacity: 1; transform: none !important; }
+.fx-up    { transform: translateY(24px); }
+.fx-down  { transform: translateY(-24px); }
+.fx-left  { transform: translateX(-24px); }
+.fx-right { transform: translateX(24px); }
+.fx-scale { transform: scale(.965); }
+.hidden { display: none !important; }
+.fx-stagger > .fx { transition-delay: calc(var(--i, 0) * 70ms); }
+
+/* ---------- type ---------- */
+.t-num   { font-family: var(--font-display); font-weight: var(--brand-font-weight); line-height: .9; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.t-disp  { font-family: var(--font-display); font-weight: var(--brand-font-weight); text-transform: uppercase; letter-spacing: .04em; line-height: 1; }
+.t-disp-600 { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; line-height: 1; }
+.t-label { font-family: var(--font-ui); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); line-height: 1; }
+.t-label-brand { font-family: var(--font-ui); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--brand-primary); line-height: 1; }
+.t-mono  { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-score { font-size: 96px; }     /* bug */
+.t-score-xl { font-size: 160px; } /* cards */
+.t-brand { color: var(--brand-primary); }
+.t-dim   { color: var(--ink-3); }
+.t-ell   { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- utility ---------- */
+.row { display: flex; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.center { align-items: center; justify-content: center; }
+.grow { flex: 1; min-width: 0; }

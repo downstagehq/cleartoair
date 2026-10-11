@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Counter-Strike 2 — In-game</title>
+<link rel="preload" href="/overlays/_shared/fonts/BarlowCondensed-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/overlays/_shared/tokens.css">
+<link rel="stylesheet" href="/overlays/_shared/skeleton.css">
+<link rel="stylesheet" href="skin.css">
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<script src="/overlays/_shared/stateBuffer.js"></script>
+<script src="/overlays/_shared/core.js"></script>
+<script src="/overlays/_shared/render.js"></script>
+<script>
+  // Series bug (live when an adapter is connected, else series score), lower third,
+  // ticker, corner tag, timeout. bugStyle comes from pack.json overlay.bugStyle;
+  // 'rounds' is the offline default for this pack.
+  CTA.connect({ page: 'ingame' });
+  CTA.render.ingame({ bugStyle: 'rounds' });
+</script>
+</body>
+</html>

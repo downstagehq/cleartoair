@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest something Clear to Air should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What happens on your show today that this would fix? A real moment from a broadcast helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now instead
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Control room
+        - Overlays / packs
+        - OBS integration
+        - Game data / adapters
+        - Remote seats / hosted control room
+        - Setup and install
+        - Other

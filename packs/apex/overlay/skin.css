@@ -1,0 +1,5 @@
+/* Apex Legends — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* Apex — angled BR strip, big numerals, no team plates */
+:root { --chamfer: 16px; }
+[data-game="apex"] .bug.br .strip .st .v { font-size: 48px; }

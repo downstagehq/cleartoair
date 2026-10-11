@@ -1,0 +1,31 @@
+{
+  "id": "apex",
+  "name": "Apex Legends",
+  "short": "APEX",
+  "sides": [],
+  "mode": "br",
+  "roundsToWin": 0,
+  "defaultFormat": "6 GAMES",
+  "formats": ["6 GAMES", "8 GAMES", "10 GAMES"],
+  "maps": [
+    { "id": "mp_rr_canyonlands_hu", "name": "Kings Canyon", "art": "assets/maps/kings-canyon.jpg", "active": true },
+    { "id": "mp_rr_desertlands_hu", "name": "World's Edge", "art": "assets/maps/worlds-edge.jpg",  "active": true },
+    { "id": "mp_rr_olympus_mu2",    "name": "Olympus",      "art": "assets/maps/olympus.jpg",      "active": true },
+    { "id": "mp_rr_tropic_island_mu2", "name": "Storm Point", "art": "assets/maps/storm-point.jpg", "active": true },
+    { "id": "mp_rr_divided_moon_mu1", "name": "Broken Moon", "art": "assets/maps/broken-moon.jpg", "active": true },
+    { "id": "mp_rr_district",       "name": "E-District",   "art": "assets/maps/e-district.jpg",   "active": true }
+  ],
+  "roles": ["IGL", "FRAGGER", "SUPPORT"],
+  "rosterSize": 3,
+  "liquipedia": "apexlegends",
+  "adapters": ["apexlive", "manual"],
+  "sims": ["apex"],
+  "scoring": {"placement": [12, 9, 7, 5, 4, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0], "perKill": 1, "matchPoint": 50},
+  "stats": { "scoreboardColumns": ["kills", "knocks", "damage", "assists"], "mvpStat": "damage" },
+  "caps": {"veto": false, "draft": false, "standings": true, "set": false, "games": false, "matchStats": false, "maps": true, "sides": false, "rounds": false, "halves": false, "series": false, "headToHead": false, "cards": ["none", "standings", "roster", "bracket", "scoreboard", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "br" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#DA292A", "secondary": "#101010" },
+  "capture": { "kind": "game_capture", "window": "Apex Legends:Respawn001:r5apex.exe" },
+  "notes": "Battle royale: live.mode = 'br', live.squads[] carries per-squad kills/damage/alive; series A/B slots are not meaningful. The apex simulator drives squads alive, ring and kill leader for rehearsal. LiveAPI is an official Respawn feature (launch options via the adapter's install())."
+}

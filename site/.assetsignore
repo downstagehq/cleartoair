@@ -1,0 +1,9 @@
+# never served from cleartoair.com
+worker.js
+wrangler.toml
+.assetsignore
+.wrangler
+vercel.json
+api
+# legacy update manifest: only the Vercel deployment serves it (installs up to 0.3.0)
+releases

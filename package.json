@@ -1,0 +1,24 @@
+{
+  "name": "cleartoair",
+  "version": "0.3.0",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "description": "Clear to Air - broadcast companion for esports tournament streams (local agent + control room + overlay packs)",
+  "type": "module",
+  "scripts": {
+    "setup": "npm --prefix agent install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund",
+    "start": "node agent/src/index.js",
+    "dev:agent": "node --watch agent/src/index.js",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "sim": "node agent/src/index.js --sim",
+    "test": "node agent/src/_selftest.js && node agent/src/adapters/_selftest.js && node relay/test/e2e.mjs",
+    "test:remote": "node relay/test/e2e.mjs",
+    "relay:assets": "node tools/relay-assets.mjs",
+    "relay:dev": "node relay/test/serve.mjs",
+    "relay:shots": "node relay/test/shot.mjs"
+  },
+  "releases": {
+    "repo": "downstagehq/cleartoair"
+  }
+}

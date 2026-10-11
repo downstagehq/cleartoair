@@ -1,0 +1,8 @@
+/* VALORANT — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* VALORANT — sharper 10px chamfer, ATK/DEF chips in the game's red/teal, bug sits clear of the top HUD */
+:root { --chamfer: 10px; }
+[data-game="valorant"] .bug-sub .cell .chip.dark { letter-spacing: .12em; }
+[data-game="valorant"] .bug-sub .cell.a .chip.dark { color: #FF4655; }
+[data-game="valorant"] .bug-sub .cell.b .chip.dark { color: #4CE0B3; }
+[data-game="valorant"] .veto-slot .map { letter-spacing: .06em; }

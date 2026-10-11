@@ -1,0 +1,7 @@
+/* Rocket League — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* Rocket League — wider chamfer, boost bars glow, clock is the hero */
+:root { --chamfer: 18px; }
+[data-game="rocketleague"] .bug .mid .v { font-size: 40px; }
+[data-game="rocketleague"] .boost .p .bar i { box-shadow: 0 0 8px var(--team); }
+[data-game="rocketleague"] .bug .tp .sc { font-size: 88px; }

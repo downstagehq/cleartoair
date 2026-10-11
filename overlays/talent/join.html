@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clear to Air · Talent Green Room</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      padding: 16px 24px;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: #334155;
+      color: #94a3b8;
+    }
+    .badge.connected { background: #059669; color: #fff; }
+    main {
+      flex: 1;
+      display: flex;
+      padding: 24px;
+      gap: 24px;
+    }
+    .preview-pane {
+      flex: 2;
+      background: #020617;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror for natural talent confidence */
+    }
+    .controls-pane {
+      flex: 1;
+      background: #0f172a;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    select, input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    select:focus, input:focus { border-color: #6366f1; }
+    .vu-container {
+      width: 100%;
+      height: 12px;
+      background: #020617;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+    .vu-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981 60%, #f59e0b 85%, #ef4444 100%);
+      transition: width 50ms linear;
+    }
+    .btn-action {
+      padding: 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 150ms;
+    }
+    .btn-live { background: #4f46e5; color: white; }
+    .btn-live:hover { background: #4338ca; }
+    .btn-live.active { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 style="margin:0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">CLEAR TO AIR · TALENT STUDIO</h1>
+      <p style="margin: 2px 0 0 0; color: #64748b; font-size: 12px;">Unified A/V Stream · Zero Audio Drop Guarantee</p>
+    </div>
+    <div id="status-badge" class="badge">OFFLINE</div>
+  </header>
+
+  <main>
+    <div class="preview-pane">
+      <video id="local-preview" autoplay playsinline muted></video>
+    </div>
+
+    <div class="controls-pane">
+      <div>
+        <label>Camera Device</label>
+        <select id="video-select"></select>
+      </div>
+
+      <div>
+        <label>Microphone Device</label>
+        <select id="audio-select"></select>
+      </div>
+
+      <div>
+        <label>Microphone Monitor (Live VU)</label>
+        <div class="vu-container">
+          <div id="vu-meter" class="vu-bar"></div>
+        </div>
+      </div>
+
+      <div style="margin-top: auto;">
+        <button id="btn-toggle-live" class="btn-action btn-live" onclick="toggleStream()">
+          <span>CONNECT TO OBS</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const slot = params.get('slot') || 'caster1';
+    const signalingHost = window.location.host || '127.0.0.1:7700';
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    let localStream = null;
+    let pc = null;
+    let ws = null;
+    let audioContext = null;
+    let analyser = null;
+    let isLive = false;
+
+    async function getDevices() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoSelect = document.getElementById('video-select');
+      const audioSelect = document.getElementById('audio-select');
+      videoSelect.innerHTML = '';
+      audioSelect.innerHTML = '';
+
+      devices.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        if (d.kind === 'videoinput') {
+          opt.text = d.label || `Camera ${videoSelect.length + 1}`;
+          videoSelect.appendChild(opt);
+        } else if (d.kind === 'audioinput') {
+          opt.text = d.label || `Microphone ${audioSelect.length + 1}`;
+          audioSelect.appendChild(opt);
+        }
+      });
+    }
+
+    async function startPreview() {
+      const videoSource = document.getElementById('video-select').value;
+      const audioSource = document.getElementById('audio-select').value;
+
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+      }
+
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: videoSource ? { exact: videoSource } : undefined, width: 1280, height: 720 },
+        audio: { deviceId: audioSource ? { exact: audioSource } : undefined, echoCancellation: true, noiseSuppression: true }
+      });
+
+      document.getElementById('local-preview').srcObject = localStream;
+      setupAudioMeter(localStream);
+    }
+
+    function setupAudioMeter(stream) {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const vuBar = document.getElementById('vu-meter');
+
+      function updateMeter() {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const pct = Math.min(100, Math.round((avg / 128) * 100));
+        vuBar.style.width = pct + '%';
+        requestAnimationFrame(updateMeter);
+      }
+      updateMeter();
+    }
+
+    function toggleStream() {
+      if (isLive) {
+        disconnect();
+      } else {
+        connect();
+      }
+    }
+
+    function connect() {
+      ws = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=caster&slot=${slot}`);
+
+      ws.onopen = async () => {
+        document.getElementById('status-badge').textContent = 'CONNECTED · LIVE';
+        document.getElementById('status-badge').className = 'badge connected';
+        document.getElementById('btn-toggle-live').textContent = 'DISCONNECT STREAM';
+        document.getElementById('btn-toggle-live').className = 'btn-action btn-live active';
+        isLive = true;
+
+        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'candidate', candidate: e.candidate }));
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({ type: 'offer', offer }));
+      };
+
+      ws.onmessage = async (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'answer' && pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+        } else if (msg.type === 'candidate' && pc) {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        }
+      };
+
+      ws.onclose = () => {
+        disconnect();
+      };
+    }
+
+    function disconnect() {
+      if (pc) pc.close();
+      if (ws) ws.close();
+      pc = null;
+      ws = null;
+      isLive = false;
+      document.getElementById('status-badge').textContent = 'OFFLINE';
+      document.getElementById('status-badge').className = 'badge';
+      document.getElementById('btn-toggle-live').textContent = 'CONNECT TO OBS';
+      document.getElementById('btn-toggle-live').className = 'btn-action btn-live';
+    }
+
+    window.onload = async () => {
+      await getDevices();
+      await startPreview();
+      document.getElementById('video-select').onchange = startPreview;
+      document.getElementById('audio-select').onchange = startPreview;
+    };
+  </script>
+</body>
+</html>

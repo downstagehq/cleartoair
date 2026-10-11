@@ -1,0 +1,65 @@
+name: Adapter report / real game payload
+description: Share what a game actually sends, or report an adapter that misreads it.
+labels: ["adapter", "real payload"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most adapters were written from documentation. A real payload is one of the most
+        useful things you can send. CONTRIBUTING.md ("Find out what the game actually sends")
+        explains how to capture one.
+
+        **Anonymise before you paste.** Replace player names, team names, Steam/Epic/Riot IDs,
+        match and server ids, and the GSI `auth.token`. Use Alpha / Bravo and made-up player names.
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Adapter
+      options:
+        - cs2gsi (Counter-Strike 2)
+        - dota2gsi (Dota 2)
+        - lolclient (League of Legends)
+        - rlstats (Rocket League)
+        - apexlive (Apex Legends)
+        - startgg (bracket import)
+        - A game with no adapter yet
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Clear to Air version
+    validations:
+      required: true
+  - type: input
+    id: game_version
+    attributes:
+      label: Game version or patch
+      placeholder: "the version the game shows, or the date you captured it"
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How was it captured?
+      description: Playing, spectating, observer client, GOTV, replay, custom lobby, LAN with anti-cheat off, ...
+    validations:
+      required: true
+  - type: textarea
+    id: payload
+    attributes:
+      label: Payload (anonymised)
+      description: One or more raw messages exactly as the game sent them, after anonymising. Attach a file if it is long.
+      render: json
+  - type: textarea
+    id: problem
+    attributes:
+      label: What Clear to Air showed, and what it should have shown
+      description: Leave empty if you are only sharing a payload.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed tokens, real names and account IDs from everything above.
+          required: true

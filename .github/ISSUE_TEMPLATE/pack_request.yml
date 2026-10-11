@@ -1,0 +1,48 @@
+name: Pack request
+description: Ask for an overlay pack for a game that is not covered, or for changes to an existing pack.
+labels: ["pack request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A pack is the per-game part of the graphics: sides, formats, map pool, which cards exist
+        and how the scorebug reads. CONTRIBUTING.md explains how to build one if you want to.
+        Please do not attach team logos, player photos or publisher artwork.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Request
+      options:
+        - New pack
+        - Change to an existing pack
+    validations:
+      required: true
+  - type: textarea
+    id: format
+    attributes:
+      label: How a match works
+      description: Teams or players per side, sides, rounds, maps or games, series formats (BO3, FT2, ...), how a winner is decided.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Live data
+      description: Does the publisher offer an official API or game state feed? Link its documentation if you know it. "None" is a fine answer; the pack can be manual.
+  - type: textarea
+    id: cards
+    attributes:
+      label: Graphics you need
+      description: Which cards and what the scorebug should show for this game.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can build or test this pack.

@@ -1,0 +1,6 @@
+/* Fighting Games — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* FGC — P1/P2 plates, pips in team colour, character line under the name */
+:root { --chamfer: 14px; }
+[data-game="fgc"] .bug .tp { flex-basis: 380px; }
+[data-game="fgc"] .pips i { width: 20px; height: 20px; }

@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clear to Air · the control room for esports broadcasts</title>
+<meta name="description" content="Clear to Air is a free, open-source control room for esports broadcasts. It pairs with your OBS, ships graphics for CS2, VALORANT, Rocket League, LoL, Dota 2, Apex, fighting games and EA FC, and checks the show before you go live.">
+<meta name="theme-color" content="#0B0D10">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:title" content="Clear to Air">
+<meta property="og:description" content="The free, open-source control room for esports broadcasts. Pairs with your OBS. Ships with the graphics.">
+<link rel="canonical" href="https://cleartoair.com/">
+<meta property="og:url" content="https://cleartoair.com/">
+<meta property="og:image" content="https://cleartoair.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="cta-mark" viewBox="168.64 261.80 302.35 302.35"><path d="M195.4,471.54c-14.86-13.77-10.82-35.19.26-47.84,10.74-12.26,31.69-20.42,46.09-7.67l48.79,43.2,103.15-124.87c11.69-14.15,34.74-8.14,45.56,1.02,12.61,10.67,20.57,32.9,8.34,47.5l-126.68,151.28c-14.17,16.92-37.95,18.5-54.12,3.52l-71.38-66.14Z"/><circle cx="285.23" cy="331.85" r="53.86"/></symbol></svg>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head">
+  <div class="wrap">
+    <a class="wordmark" href="#top" aria-label="Clear to Air, home"><svg class="logo" viewBox="49.27 362.23 500.02 75.44" aria-hidden="true" focusable="false"><defs><mask id="cta-a-nav" maskUnits="userSpaceOnUse" x="49.27" y="362.23" width="500.02" height="75.44"><rect x="49.27" y="362.23" width="500.02" height="75.44" fill="#fff"/><path fill="#000" d="M423.27,420.17c-1.92-.06-3.5-.9-3.94-2.45-.36-1.25.27-3.41,1.74-4.22,2.78-1.53,5.86-1.56,9.24-1.36.41,2.21.07,4.23-1.45,5.97-1.14,1.3-3.24,2.13-5.6,2.06Z"/><path fill="#000" d="M193.6,420.18c-2.18.01-3.78-.98-4.14-2.68-.32-1.52.49-3.53,2.16-4.25,2.81-1.23,5.7-1.3,8.97-1.1.28,2.19-.09,4.13-1.49,5.91-1.05,1.33-3.28,2.11-5.49,2.13Z"/></mask></defs><g class="cta-word" mask="url(#cta-a-nav)"><path d="M346.87,399.42c-3.72-.75-7.45-.37-10.1,2.59-2.82,4.27-3.22,10.48.19,14.66s10.19,3.94,13.58.09c2.51-2.85,2.68-6.51,2.4-10.1-1.07-12.39-9.14-17.86-21.15-18.21,6.22-2.43,12.88-2.61,19.18-1.34,11.03,2.22,17.59,11.56,17.47,22.52-.11,10.07-5.67,18.74-15.63,21.46-12.37,3.37-27.02.03-31.87-12.46-2.35-6.05-2.26-12.82.1-18.81,2.17-5.5,7.04-8.82,12.55-8.97s10.95,2.69,13.29,8.6Z"/><path d="M161.88,429.66c-9.05,4.08-22.41,4.05-29.94-2.8-4.1-3.72-5.45-9.62-2.87-14.65,2.15-4.18,6.62-7.17,11.43-7.22l13.93-.15c-.09-3.4-2.45-5.62-5.63-6.13-5.97-.68-11.8,1.37-16.33,5.33-3.65,3.23-5.62,7.42-6.28,12.46-3.39-12.07,1.87-26.19,14.57-29.34,4.72-1.17,9.55-1.13,14.14.23,9.28,2.74,14.46,11.25,13.52,20.72-.43,4.33-3.08,7.32-7.63,7.32h-20.3c.51,2.5,2.65,3.66,5.11,4.19,8.05,1.72,14.54-2.9,18.38-.07,1.62,1.2,2.1,3.59,1.8,5.46s-1.87,3.73-3.9,4.64Z"/><path d="M437.77,431.03c-3.5-.1-5.95-1.35-7.25-4.65-3.61,6.58-15.05,7.09-20.58,3.44-6.98-4.62-8.3-15.05-2.59-21.2,6.03-6.49,17.93-6.61,26.88-5.35,5.69.8,10.68,5.36,11.4,11.18.41,3.35.3,6.86,0,10.08-.37,4.12-3.76,6.62-7.87,6.5ZM423.27,420.17c2.36.08,4.46-.75,5.6-2.06,1.52-1.74,1.86-3.76,1.45-5.97-3.38-.19-6.46-.16-9.24,1.36-1.47.81-2.09,2.96-1.74,4.22.44,1.55,2.02,2.39,3.94,2.45Z"/><path d="M207.59,431.03c-3.47-.17-5.87-1.61-6.83-4.65-4.22,6.96-16.05,7.08-21.42,2.91-5.62-4.36-7.14-12.87-3.22-18.89,5.35-8.23,19.12-8.65,28.72-7.02,7.08,1.2,11.59,7.51,11.28,14.44l-.29,6.66c-.19,4.27-3.92,6.77-8.23,6.56ZM193.6,420.18c2.21-.01,4.45-.8,5.49-2.13,1.4-1.77,1.77-3.71,1.49-5.91-3.27-.2-6.16-.13-8.97,1.1-1.67.73-2.49,2.73-2.16,4.25.36,1.71,1.96,2.7,4.14,2.68Z"/><path d="M72.69,401.67c-2.44,2.96-2.99,6.79-2.7,10.42.66,8.23,5.12,15.06,11.98,20.05-7.16.61-14.42-.94-20.15-5.44-6.59-5.17-8.46-15.71-6.43-24.15,3.55-14.78,20.73-19.28,33.81-14.39,2.39.89,4.43,2.7,5,5.13.45,1.94-.11,4.03-1.3,5.34s-3.33,2.02-5.18,1.71l-7.06-1.2c-2.72-.46-6.04.2-7.96,2.53Z"/><path d="M115.37,415.97c-7.92-.74-15.2-6.67-15.19-14.1l.04-27.54c0-4.27,3.41-6.75,7.31-6.83s7.7,2.42,7.71,6.86l.13,41.61Z"/><path d="M316.15,399.06c-3.89,3.71-16.94-3.61-23.75,12.6l-.08-11.2c-2.09-.05-3.95-.33-5.19-1.58-2.21-2.22-2.25-7.28-.1-9.66,1.17-1.29,3.19-1.56,5.16-1.57l.61-6.87c.34-3.84,3.93-5.62,7.56-5.5,3.08.1,5.98,1.52,6.81,4.78.58,2.29.57,5.01.65,7.56l6.41.4c3.41.21,5.36,7.74,1.91,11.04Z"/><path d="M526.07,407.51c-6.51-1.85-12.87.96-15.33,7.04l.05-19.84c.01-4.63,3.81-7.37,8.12-7.06,2.82.2,5.04,1.45,6.4,4.17,3.17-5.46,11.44-7.01,16.42-4.08,2.81,1.65,2.63,5.35,1.59,7.78-2.63,6.15-10.6,1.63-14.47,4.61-2.3,1.78-2.82,4.74-2.77,7.38Z"/><path d="M237.1,407.51c-6.21-1.78-12.55.77-15.17,6.96v-19.81c.02-4.62,3.92-7.37,8.16-7.02,2.9.25,4.89,1.43,6.42,4.21,2.57-4.49,7.52-5.93,12.48-5.42,2.95.3,5.76,1.74,6.08,4.88.22,2.17-.46,4.59-1.78,5.93-3.4,3.47-8.71.34-13.41,2.7-1.88,2.05-2.61,4.22-2.78,7.56Z"/><path d="M446.1,410.66c-3.72-10.64-16.43-12.22-27.49-10.81-2.66.34-5.52.42-8.02-.2-2.72-.68-3.62-3.39-3.64-5.76s1.78-4.26,4.38-5.17c7.19-2.52,14.93-3.06,22.45-1.59,10.79,2.1,12.84,12.94,12.32,23.53Z"/><path d="M216.31,410.63c-3.89-10.64-16.71-12.19-27.39-10.79-2.78.36-5.79.47-8.37-.26s-3.38-3.32-3.42-5.71c-.04-2.25,1.6-4.18,4.11-5.07,7.31-2.6,15.21-3.18,22.86-1.62,10.96,2.23,12.52,13.37,12.21,23.45Z"/><path d="M317.15,421.62c1.63,1.63,1.69,4.12,1.09,6.08-1.72,5.65-13.54,5.83-19.27,2.12-6.01-3.9-7.75-12.52-4.39-18.64,2.66-4.85,7.72-7.06,13.12-7.37l.21,12.08c.1,5.74,6.46,2.95,9.24,5.72Z"/><path d="M525.94,423.71c-.04,4.8-3.65,7.63-8.01,7.36-3.23-.2-5.88-1.77-6.72-5.11-.72-2.87-.96-6.46.17-9.34,2.3-5.82,8.74-8.12,14.67-6.28l-.11,13.36Z"/><path d="M237.02,424.01c-.04,4.45-3.45,7.09-7.36,7.07s-6.82-1.94-7.48-5.83c-.41-2.38-.62-5.54.13-7.93,1.97-6.26,8.75-8.93,14.84-6.97l-.13,13.65Z"/><path d="M120.93,425.19c-.63,5.92-9.73,7.98-15.33,4.72-6.52-3.8-5.61-14.13-5.32-22.43,1.39,4.23,3.89,7.32,7.95,9.25,3.18,1.51,6.74,1.66,10.21,2.4,2.41.51,2.7,4.05,2.49,6.06Z"/><path d="M80.46,428.18c-2.67-2.6-4.08-5.94-4.98-9.2,5.45,2.04,10.57-1.74,15.37-.32,2.96.87,4.42,5.18,2.99,7.8-2.69,4.93-9.32,5.67-13.38,1.71Z"/></g><g class="cta-lamp" id="lamp-nav"><path d="M457.28,417.71c-2.74-2.54-2-6.49.05-8.83s5.85-3.77,8.51-1.42l9,7.97,19.04-23.05c2.16-2.61,6.41-1.5,8.41.19,2.33,1.97,3.8,6.07,1.54,8.77l-23.38,27.92c-2.61,3.12-7,3.41-9.99.65l-13.18-12.21Z"/><circle cx="473.86" cy="391.93" r="9.94"/></g></svg></a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="#how">How it works</a>
+      <a href="#open-source">Open source</a>
+      <a href="#support">Support</a>
+      <a href="#faq">FAQ</a>
+      <!-- repo link: set once in site.js REPO -->
+      <a class="btn btn-sm" href="#open-source" data-repo-path="" data-repo-soon="Open source">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-copy">
+      <h1 class="hero-logo"><span class="sr-only">Clear to Air</span><svg class="logo" viewBox="49.27 362.23 500.02 75.44" aria-hidden="true" focusable="false"><defs><mask id="cta-a-hero" maskUnits="userSpaceOnUse" x="49.27" y="362.23" width="500.02" height="75.44"><rect x="49.27" y="362.23" width="500.02" height="75.44" fill="#fff"/><path fill="#000" d="M423.27,420.17c-1.92-.06-3.5-.9-3.94-2.45-.36-1.25.27-3.41,1.74-4.22,2.78-1.53,5.86-1.56,9.24-1.36.41,2.21.07,4.23-1.45,5.97-1.14,1.3-3.24,2.13-5.6,2.06Z"/><path fill="#000" d="M193.6,420.18c-2.18.01-3.78-.98-4.14-2.68-.32-1.52.49-3.53,2.16-4.25,2.81-1.23,5.7-1.3,8.97-1.1.28,2.19-.09,4.13-1.49,5.91-1.05,1.33-3.28,2.11-5.49,2.13Z"/></mask></defs><g class="cta-word" mask="url(#cta-a-hero)"><path d="M346.87,399.42c-3.72-.75-7.45-.37-10.1,2.59-2.82,4.27-3.22,10.48.19,14.66s10.19,3.94,13.58.09c2.51-2.85,2.68-6.51,2.4-10.1-1.07-12.39-9.14-17.86-21.15-18.21,6.22-2.43,12.88-2.61,19.18-1.34,11.03,2.22,17.59,11.56,17.47,22.52-.11,10.07-5.67,18.74-15.63,21.46-12.37,3.37-27.02.03-31.87-12.46-2.35-6.05-2.26-12.82.1-18.81,2.17-5.5,7.04-8.82,12.55-8.97s10.95,2.69,13.29,8.6Z"/><path d="M161.88,429.66c-9.05,4.08-22.41,4.05-29.94-2.8-4.1-3.72-5.45-9.62-2.87-14.65,2.15-4.18,6.62-7.17,11.43-7.22l13.93-.15c-.09-3.4-2.45-5.62-5.63-6.13-5.97-.68-11.8,1.37-16.33,5.33-3.65,3.23-5.62,7.42-6.28,12.46-3.39-12.07,1.87-26.19,14.57-29.34,4.72-1.17,9.55-1.13,14.14.23,9.28,2.74,14.46,11.25,13.52,20.72-.43,4.33-3.08,7.32-7.63,7.32h-20.3c.51,2.5,2.65,3.66,5.11,4.19,8.05,1.72,14.54-2.9,18.38-.07,1.62,1.2,2.1,3.59,1.8,5.46s-1.87,3.73-3.9,4.64Z"/><path d="M437.77,431.03c-3.5-.1-5.95-1.35-7.25-4.65-3.61,6.58-15.05,7.09-20.58,3.44-6.98-4.62-8.3-15.05-2.59-21.2,6.03-6.49,17.93-6.61,26.88-5.35,5.69.8,10.68,5.36,11.4,11.18.41,3.35.3,6.86,0,10.08-.37,4.12-3.76,6.62-7.87,6.5ZM423.27,420.17c2.36.08,4.46-.75,5.6-2.06,1.52-1.74,1.86-3.76,1.45-5.97-3.38-.19-6.46-.16-9.24,1.36-1.47.81-2.09,2.96-1.74,4.22.44,1.55,2.02,2.39,3.94,2.45Z"/><path d="M207.59,431.03c-3.47-.17-5.87-1.61-6.83-4.65-4.22,6.96-16.05,7.08-21.42,2.91-5.62-4.36-7.14-12.87-3.22-18.89,5.35-8.23,19.12-8.65,28.72-7.02,7.08,1.2,11.59,7.51,11.28,14.44l-.29,6.66c-.19,4.27-3.92,6.77-8.23,6.56ZM193.6,420.18c2.21-.01,4.45-.8,5.49-2.13,1.4-1.77,1.77-3.71,1.49-5.91-3.27-.2-6.16-.13-8.97,1.1-1.67.73-2.49,2.73-2.16,4.25.36,1.71,1.96,2.7,4.14,2.68Z"/><path d="M72.69,401.67c-2.44,2.96-2.99,6.79-2.7,10.42.66,8.23,5.12,15.06,11.98,20.05-7.16.61-14.42-.94-20.15-5.44-6.59-5.17-8.46-15.71-6.43-24.15,3.55-14.78,20.73-19.28,33.81-14.39,2.39.89,4.43,2.7,5,5.13.45,1.94-.11,4.03-1.3,5.34s-3.33,2.02-5.18,1.71l-7.06-1.2c-2.72-.46-6.04.2-7.96,2.53Z"/><path d="M115.37,415.97c-7.92-.74-15.2-6.67-15.19-14.1l.04-27.54c0-4.27,3.41-6.75,7.31-6.83s7.7,2.42,7.71,6.86l.13,41.61Z"/><path d="M316.15,399.06c-3.89,3.71-16.94-3.61-23.75,12.6l-.08-11.2c-2.09-.05-3.95-.33-5.19-1.58-2.21-2.22-2.25-7.28-.1-9.66,1.17-1.29,3.19-1.56,5.16-1.57l.61-6.87c.34-3.84,3.93-5.62,7.56-5.5,3.08.1,5.98,1.52,6.81,4.78.58,2.29.57,5.01.65,7.56l6.41.4c3.41.21,5.36,7.74,1.91,11.04Z"/><path d="M526.07,407.51c-6.51-1.85-12.87.96-15.33,7.04l.05-19.84c.01-4.63,3.81-7.37,8.12-7.06,2.82.2,5.04,1.45,6.4,4.17,3.17-5.46,11.44-7.01,16.42-4.08,2.81,1.65,2.63,5.35,1.59,7.78-2.63,6.15-10.6,1.63-14.47,4.61-2.3,1.78-2.82,4.74-2.77,7.38Z"/><path d="M237.1,407.51c-6.21-1.78-12.55.77-15.17,6.96v-19.81c.02-4.62,3.92-7.37,8.16-7.02,2.9.25,4.89,1.43,6.42,4.21,2.57-4.49,7.52-5.93,12.48-5.42,2.95.3,5.76,1.74,6.08,4.88.22,2.17-.46,4.59-1.78,5.93-3.4,3.47-8.71.34-13.41,2.7-1.88,2.05-2.61,4.22-2.78,7.56Z"/><path d="M446.1,410.66c-3.72-10.64-16.43-12.22-27.49-10.81-2.66.34-5.52.42-8.02-.2-2.72-.68-3.62-3.39-3.64-5.76s1.78-4.26,4.38-5.17c7.19-2.52,14.93-3.06,22.45-1.59,10.79,2.1,12.84,12.94,12.32,23.53Z"/><path d="M216.31,410.63c-3.89-10.64-16.71-12.19-27.39-10.79-2.78.36-5.79.47-8.37-.26s-3.38-3.32-3.42-5.71c-.04-2.25,1.6-4.18,4.11-5.07,7.31-2.6,15.21-3.18,22.86-1.62,10.96,2.23,12.52,13.37,12.21,23.45Z"/><path d="M317.15,421.62c1.63,1.63,1.69,4.12,1.09,6.08-1.72,5.65-13.54,5.83-19.27,2.12-6.01-3.9-7.75-12.52-4.39-18.64,2.66-4.85,7.72-7.06,13.12-7.37l.21,12.08c.1,5.74,6.46,2.95,9.24,5.72Z"/><path d="M525.94,423.71c-.04,4.8-3.65,7.63-8.01,7.36-3.23-.2-5.88-1.77-6.72-5.11-.72-2.87-.96-6.46.17-9.34,2.3-5.82,8.74-8.12,14.67-6.28l-.11,13.36Z"/><path d="M237.02,424.01c-.04,4.45-3.45,7.09-7.36,7.07s-6.82-1.94-7.48-5.83c-.41-2.38-.62-5.54.13-7.93,1.97-6.26,8.75-8.93,14.84-6.97l-.13,13.65Z"/><path d="M120.93,425.19c-.63,5.92-9.73,7.98-15.33,4.72-6.52-3.8-5.61-14.13-5.32-22.43,1.39,4.23,3.89,7.32,7.95,9.25,3.18,1.51,6.74,1.66,10.21,2.4,2.41.51,2.7,4.05,2.49,6.06Z"/><path d="M80.46,428.18c-2.67-2.6-4.08-5.94-4.98-9.2,5.45,2.04,10.57-1.74,15.37-.32,2.96.87,4.42,5.18,2.99,7.8-2.69,4.93-9.32,5.67-13.38,1.71Z"/></g><g class="cta-lamp" id="lamp-hero"><path d="M457.28,417.71c-2.74-2.54-2-6.49.05-8.83s5.85-3.77,8.51-1.42l9,7.97,19.04-23.05c2.16-2.61,6.41-1.5,8.41.19,2.33,1.97,3.8,6.07,1.54,8.77l-23.38,27.92c-2.61,3.12-7,3.41-9.99.65l-13.18-12.21Z"/><circle cx="473.86" cy="391.93" r="9.94"/></g></svg></h1>
+      <p class="hero-sub">The control room for esports broadcasts. Pairs with your OBS. Ships with the graphics.</p>
+      <div class="hero-cta">
+        <!-- repo link: set once in site.js REPO -->
+        <a class="btn btn-primary btn-lg" href="#open-source" data-repo-path="" data-repo-soon="Free and open source">Get it on GitHub</a>
+        <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+      </div>
+      <p class="hero-note">Free and open source, for tournament organisers who broadcast on OBS. Runs on Windows.</p>
+      <p class="hero-note hero-status"><span class="status-dot" aria-hidden="true"></span>Early software. Tested against the built-in simulators and on one real OBS setup; testing with real games is in progress.</p>
+    </div>
+
+    <div class="frame-wrap">
+      <div class="frame" aria-label="The Clear to Air control room, shown mid-series during a Valorant match" role="img">
+        <div class="chrome" aria-hidden="true">
+          <i></i><i></i><i></i>
+          <div class="url"><svg class="mk is-ok" viewBox="0 0 302.35 302.35" aria-hidden="true" focusable="false"><use href="#cta-mark"/></svg>127.0.0.1:7700</div>
+        </div>
+        <div class="cr-fit" aria-hidden="true">
+          <div class="cr" id="cr">
+
+            <!-- RAIL -->
+            <aside class="cr-rail">
+              <div class="cr-logo"><svg class="mk is-ok" viewBox="0 0 302.35 302.35" aria-hidden="true" focusable="false"><use href="#cta-mark"/></svg></div>
+              <div class="ico" title="Show"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 20V10"/></svg></div>
+              <div class="ico on" title="Match"><svg viewBox="0 0 24 24"><path d="M4 20 20 4M4 4l16 16"/></svg></div>
+              <div class="ico" title="Graphics"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg></div>
+              <div class="ico" title="Data"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+              <div class="ico" title="Rundown"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+              <div class="ico" title="Preflight"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg></div>
+              <div class="ico" title="Setup"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></div>
+            </aside>
+
+            <!-- WORKSPACE -->
+            <div class="cr-ws">
+              <div class="cr-tabs">
+                <span>Show</span><span class="on">Match</span><span>Graphics</span><span>Data</span><span>Rundown</span><span>Preflight</span><span>Setup</span>
+                <span class="spacer"></span>
+                <span class="kbd-hint"><span class="keycap">⌘</span><span class="keycap">K</span></span>
+              </div>
+              <div class="cr-grid">
+
+                <section class="panel p-series">
+                  <div class="panel-h"><span class="label">Series · Grand final · Bo3</span><span class="chip live">Live · map 2</span></div>
+                  <div class="panel-b">
+                    <div class="series">
+                      <div class="team">
+                        <div class="badge" style="background:#D9B25A;color:#111">AL</div>
+                        <div><div class="name">Alpha</div><div class="sub">Seed 1 · 2–0 in bracket</div></div>
+                      </div>
+                      <div class="score"><span>1</span><span class="sep">–</span><span>0</span></div>
+                      <div class="team right">
+                        <div class="badge" style="background:#5B8CFF;color:#111">BR</div>
+                        <div><div class="name">Bravo</div><div class="sub">Seed 2 · 2–1 in bracket</div></div>
+                      </div>
+                    </div>
+                    <div class="series-foot">
+                      <div class="meta"><span class="mbtn sm">Swap sides</span><span class="mbtn sm">Edit teams</span></div>
+                      <div class="meta"><span class="keycap">T</span>take · <span class="keycap">R</span>replay</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="panel p-maps">
+                  <div class="panel-h"><span class="label">Maps</span><span class="mbtn sm">+ Add</span></div>
+                  <div class="panel-b">
+                    <div class="maprow"><span class="n">01</span><span class="m">Ascent</span><span class="s">13 – 9</span><span class="st">Final</span></div>
+                    <div class="maprow live"><span class="n">02</span><span class="m">Bind</span><span class="s">7 – 5</span><span class="st live">Live</span></div>
+                    <div class="maprow"><span class="n">03</span><span class="m">Haven</span><span class="s">– – –</span><span class="st">Decider</span></div>
+                  </div>
+                </section>
+
+                <section class="panel p-veto">
+                  <div class="panel-h"><span class="label">Map veto · Bo3 · A-B-A-B-A-B-decider</span><span class="chip">On air</span></div>
+                  <div class="panel-b">
+                    <div class="veto">
+                      <div class="vstep ban" style="border-left-color:#D9B25A"><div class="k">Ban</div><div class="v">Lotus</div><div class="t">Alpha</div></div>
+                      <div class="vstep ban" style="border-left-color:#5B8CFF"><div class="k">Ban</div><div class="v">Sunset</div><div class="t">Bravo</div></div>
+                      <div class="vstep" style="border-left-color:#D9B25A"><div class="k">Pick</div><div class="v">Ascent</div><div class="t">Alpha</div></div>
+                      <div class="vstep" style="border-left-color:#5B8CFF"><div class="k">Pick</div><div class="v">Bind</div><div class="t">Bravo</div></div>
+                      <div class="vstep ban" style="border-left-color:#D9B25A"><div class="k">Ban</div><div class="v">Split</div><div class="t">Alpha</div></div>
+                      <div class="vstep ban" style="border-left-color:#5B8CFF"><div class="k">Ban</div><div class="v">Abyss</div><div class="t">Bravo</div></div>
+                      <div class="vstep decider"><div class="k">Decider</div><div class="v">Haven</div><div class="t">Left over</div></div>
+                    </div>
+                    <div class="pool">
+                      <span class="used">Ascent</span><span class="used">Bind</span><span class="used">Haven</span><span class="used">Lotus</span><span class="used">Sunset</span><span class="used">Split</span><span class="used">Abyss</span><span>Corrode</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="panel p-rosters">
+                  <div class="panel-h"><span class="label">Rosters</span><span class="mbtn sm">Import</span></div>
+                  <div class="panel-b">
+                    <div class="roster">
+                      <div><div class="h" style="border-color:#D9B25A">Alpha</div><span>Zephyr</span><span>Kestrel</span><span>Onyx</span><span>Talon</span><span>Ronin</span></div>
+                      <div><div class="h" style="border-color:#5B8CFF">Bravo</div><span>Rift</span><span>Ember</span><span>Nomad</span><span>Static</span><span>Quartz</span></div>
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+
+            <!-- AIR -->
+            <aside class="cr-air">
+              <div class="tile pgm">
+                <span class="tag chip pgm">PGM</span>
+                <span class="scene-name">04 · In-game</span>
+                <div class="tile-art map">
+                  <div class="bug">
+                    <div class="side l" style="border-color:#D9B25A">Alpha</div><div class="num">7</div><div class="mid">MAP 2</div><div class="num">5</div><div class="side r" style="border-color:#5B8CFF">Bravo</div>
+                  </div>
+                </div>
+              </div>
+              <div class="tile pvw">
+                <span class="tag chip pvw">PVW</span>
+                <span class="scene-name">03 · Cards</span>
+                <div class="tile-art card"><div class="big">Haven</div><div class="sm">Decider · Map 3</div></div>
+              </div>
+              <div class="take">Take <small>T</small></div>
+              <div class="scenes">
+                <div class="scn"><b>F1</b><span>Starting soon</span></div>
+                <div class="scn"><b>F2</b><span>Desk</span></div>
+                <div class="scn pvw"><b>F3</b><span>Cards</span></div>
+                <div class="scn pgm"><b>F4</b><span>In-game</span></div>
+                <div class="scn"><b>F5</b><span>Replay</span></div>
+                <div class="scn"><b>F6</b><span>BRB</span></div>
+                <div class="scn armed"><b>F7</b><span>Post-match</span></div>
+                <div class="scn"><b>F8</b><span>Outro</span></div>
+              </div>
+              <div class="air-row">
+                <span class="mbtn">Replay <span class="keycap">R</span></span>
+                <span class="mbtn">Mute <span class="keycap">M</span></span>
+                <span class="mbtn">Stream <span class="tgl on"></span></span>
+                <span class="mbtn">Record <span class="rec"></span></span>
+              </div>
+            </aside>
+
+            <!-- STATUS BAR -->
+            <div class="cr-status">
+              <span class="st plain"><svg class="mk is-ok" viewBox="0 0 302.35 302.35" aria-hidden="true" focusable="false"><use href="#cta-mark"/></svg>CLEAR</span>
+              <span class="st">agent 127.0.0.1:7700</span>
+              <span class="st">OBS 32.1</span>
+              <span class="st warn">valorant · manual</span>
+              <span class="st">4 overlays</span>
+              <span class="st">rec</span>
+              <span class="spacer"></span>
+              <span class="st plain"><span class="keycap">⌘</span><span class="keycap">K</span></span>
+              <span class="clock" id="cr-clock">12:04:31</span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AT A GLANCE ============ -->
+<section class="proof" aria-labelledby="proof-h">
+  <div class="wrap">
+    <h2 id="proof-h" class="label eyebrow">In the box</h2>
+    <div class="proof-grid">
+      <div class="proof-tile reveal"><div class="num">8</div><div class="what">game packs, each with its own overlays, match model and simulator</div></div>
+      <div class="proof-tile reveal" data-delay="1"><div class="num">5</div><div class="what">games with a live data feed from the publisher driving the graphics</div></div>
+      <div class="proof-tile reveal" data-delay="2"><div class="num">8</div><div class="what">OBS scenes, built from the control room and installed into OBS</div></div>
+      <div class="proof-tile reveal" data-delay="3"><div class="num">Free</div><div class="what">AGPL-3.0+ for the app, MIT for the packs and the overlay renderer</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="section" id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="label eyebrow">How it works</span>
+      <h2 id="how-h">It watches the things that fail quietly on a tournament stream.</h2>
+      <p>Graphics are the easy part. Grassroots broadcasts usually go wrong because a source stopped, a caster's audio dropped, or someone changed the OBS scenes after rehearsal. Clear to Air checks for those before and during the show.</p>
+    </div>
+
+    <!-- Preflight -->
+    <article class="feature">
+      <div class="f-ui reveal" aria-hidden="true">
+        <div class="panel-h"><span class="label">Preflight</span><span class="mbtn sm">Run again</span></div>
+        <div class="panel-b">
+          <div class="pf-lamp-row">
+            <svg class="mk is-warn" viewBox="0 0 302.35 302.35" aria-hidden="true" focusable="false"><use href="#cta-mark"/></svg>
+            <div><div class="t warn">Clear, with warnings</div><div class="s">19 checks · 0 fail · 1 warn · 12:03:58</div></div>
+          </div>
+          <div class="check"><span class="g"></span><div><div class="w">OBS 32.1 connected</div></div><span class="k">obs</span></div>
+          <div class="check"><span class="g"></span><div><div class="w">8 recipe scenes present</div></div><span class="k">scenes</span></div>
+          <div class="check"><span class="g"></span><div><div class="w">Overlays connected: 4</div></div><span class="k">overlays</span></div>
+          <div class="check"><span class="g"></span><div><div class="w">Graphics sit above the game capture</div></div><span class="k">order</span></div>
+          <div class="check"><span class="g"></span><div><div class="w">Audio bed correct in every recipe scene</div></div><span class="k">audio</span></div>
+          <div class="check warn"><span class="g"></span><div><div class="w">The recording drive is low · 8.4 GB free on D:\Recordings</div><div class="fix"><b>FIX</b>Free at least 10 GB for a show day: move old recordings off this drive.</div></div><span class="k">disk</span></div>
+        </div>
+      </div>
+      <div class="f-copy reveal">
+        <span class="label eyebrow">Preflight</span>
+        <h3>A lamp that tells you whether the show is ready.</h3>
+        <p>Preflight checks the OBS connection, the eight show scenes, the overlay browser sources, the audio in every scene, that the graphics sit above the game capture, that no rehearsal source is on program, that the sample event is gone, that no simulator is feeding the graphics, the replay buffer, the recording tracks and the free disk space.</p>
+        <p>It runs every ten seconds and on demand. The lamp is green when nothing fails and nothing warns, amber when there are only warnings, and red when something fails. Every problem comes with a fix written for the operator: which tab, which button, or which OBS setting.</p>
+      </div>
+    </article>
+
+    <!-- Drift -->
+    <article class="feature">
+      <div class="f-ui reveal" aria-hidden="true">
+        <div class="panel-h"><span class="label">Collection drift</span><span class="chip" style="color:var(--warn);border-color:var(--warn)">1 difference</span></div>
+        <div class="panel-b">
+          <div class="drift-cols">
+            <div>
+              <span class="label">Generated</span>
+              <div class="drow"><span>04 · IN-GAME</span><span class="p">scene</span></div>
+              <div class="drow"><span>└ GAME · Capture</span><span class="p">visible</span></div>
+              <div class="drow diff"><span>└ GFX · In-Game</span><span class="p">visible</span></div>
+              <div class="drow"><span>└ AUDIO · Desktop</span><span class="p">visible</span></div>
+              <div class="drow"><span>05 · REPLAY</span><span class="p">scene</span></div>
+            </div>
+            <div>
+              <span class="label">Running in OBS</span>
+              <div class="drow"><span>04 · IN-GAME</span><span class="p">scene</span></div>
+              <div class="drow"><span>└ GAME · Capture</span><span class="p">visible</span></div>
+              <div class="drow diff"><span>└ GFX · In-Game</span><span class="p">hidden</span></div>
+              <div class="drow"><span>└ AUDIO · Desktop</span><span class="p">visible</span></div>
+              <div class="drow"><span>05 · REPLAY</span><span class="p">scene</span></div>
+            </div>
+          </div>
+          <div class="drift-foot">
+            <span class="msg">Scene <b>04 · IN-GAME</b> · source <b>GFX · In-Game</b> is hidden in OBS.</span>
+            <span class="mbtn sm">Refresh</span>
+          </div>
+        </div>
+      </div>
+      <div class="f-copy reveal">
+        <span class="label eyebrow">Drift detection</span>
+        <h3>Shows you where OBS no longer matches the collection.</h3>
+        <p>Somebody "just tweaked one thing" in OBS after rehearsal. Drift detection compares what OBS is running with the collection Clear to Air generates: the scenes, the sources in each scene, whether each one is visible, the browser-source URLs and the audio.</p>
+        <p>Every difference is listed by scene and source. Read the list before you reinstall the collection, because a reinstall replaces changes made by hand in OBS.</p>
+      </div>
+    </article>
+
+    <!-- Watchdogs -->
+    <article class="feature">
+      <div class="f-ui reveal" aria-hidden="true">
+        <div class="panel-h"><span class="label">Watchdog log</span><span class="chip">Every 5 s</span></div>
+        <div class="panel-b">
+          <div class="wd-log">
+            <div><span class="ts">12:03:40</span><span class="src">audio</span><span class="warn">CAM · Caster 2 on air, AUDIO · Caster 2 silent</span></div>
+            <div><span class="ts">12:03:40</span><span class="src">audio</span><span>Reloaded AUDIO · Caster 2</span></div>
+            <div><span class="ts">12:03:50</span><span class="src">audio</span><span class="ok">Cleared</span></div>
+            <div><span class="ts">12:04:05</span><span class="src">replay</span><span class="warn">Replay buffer not running while the series is live</span></div>
+            <div><span class="ts">12:04:20</span><span class="src">replay</span><span class="ok">Cleared</span></div>
+          </div>
+          <div class="meter">
+            <span class="label"><span>Talent audio</span><span>Caster 1 · Caster 2</span></span>
+            <div class="bars"><div class="bar" style="--w:68%"><i></i></div><div class="bar" style="--w:54%"><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="f-copy reveal">
+        <span class="label eyebrow">Watchdogs</span>
+        <h3>A caster on camera with no audio is caught in about ten seconds.</h3>
+        <p>Four watchdogs run every five seconds: a caster's camera on program while their audio is silent, a game feed that stopped sending data, the replay buffer off while a series is live, and a recording drive filling fast with little space left. Each one shows up as a preflight warning until it clears.</p>
+        <p>For the silent caster it acts by itself: it reloads that person's audio source, at most once a minute. If the voice still does not come back, it tells you to have them rejoin with the same invite link.</p>
+      </div>
+    </article>
+
+    <!-- Graphics -->
+    <article class="feature">
+      <div class="f-ui reveal" aria-hidden="true">
+        <div class="panel-h"><span class="label">VALORANT pack</span><span class="chip">MIT</span></div>
+        <div class="panel-b">
+          <div class="tpl-tabs"><span class="on">In-game</span><span>Cards</span><span>Standby</span><span>Desk</span></div>
+          <div class="tpl-stage">
+            <div class="bug">
+              <div class="side l" style="border-color:#D9B25A">Alpha</div><div class="num">7</div><div class="mid">MAP 2 · BIND</div><div class="num">5</div><div class="side r" style="border-color:#5B8CFF">Bravo</div>
+            </div>
+            <div class="l3"><div class="name">Riley Chen</div><div class="role">Play-by-play</div></div>
+          </div>
+          <div class="tpl-list"><span>pack.json</span><span>overlay/ingame.html</span><span>overlay/cards.html</span><span>overlay/standby.html</span><span>overlay/desk.html</span><span>overlay/skin.css</span></div>
+        </div>
+      </div>
+      <div class="f-copy reveal">
+        <span class="label eyebrow">Graphics</span>
+        <h3>Series bug, lower thirds, ticker and full-frame cards for every game.</h3>
+        <p>Each pack has four pages that OBS loads as browser sources: in-game (series bug, ticker and lower third), full-frame cards, standby and the caster desk. The cards cover head-to-head, rosters, bracket, scoreboard, MVP and schedule, plus what the game's format needs: map veto for CS2 and VALORANT, the draft for Dota 2 and LoL, standings for Apex, the set for fighting games, match stats for EA FC and game-by-game for Rocket League.</p>
+        <p>Packs are HTML and CSS under the MIT licence, as is the shared renderer they draw with, so you can restyle one, build your own, and share or sell it. Event colours, logo and font are set once in Setup and flow into every page.</p>
+      </div>
+    </article>
+
+    <!-- Live data -->
+    <article class="feature">
+      <div class="f-ui reveal" aria-hidden="true">
+        <div class="panel-h"><span class="label">Data · adapters</span><span class="mbtn sm">Simulators</span></div>
+        <div class="panel-b">
+          <div class="adapters">
+            <div class="adp"><span class="g">CS2</span><span class="st on">GSI</span><span class="m">Valve Game State Integration · <b>round, score, players, bomb</b></span></div>
+            <div class="adp"><span class="g">Dota 2</span><span class="st on">GSI</span><span class="m">Valve Game State Integration · <b>draft, gold, kills, clock</b></span></div>
+            <div class="adp"><span class="g">Rocket League</span><span class="st on">Stats API</span><span class="m">Psyonix Stats API · <b>score, clock, boost, saves</b></span></div>
+            <div class="adp"><span class="g">League of Legends</span><span class="st on">Live client</span><span class="m">Live Client Data API · <b>gold, kills, objectives</b></span></div>
+            <div class="adp"><span class="g">Apex</span><span class="st on">LiveAPI</span><span class="m">Respawn LiveAPI, private matches · <b>squads, kills, ring</b></span></div>
+            <div class="adp"><span class="g">VALORANT</span><span class="st man">Manual</span><span class="m">No live API from Riot · <b>round desk, scoreboard paste</b></span></div>
+          </div>
+          <div class="feed">
+            <div class="h"><span>Player</span><span>Team</span><span>K</span><span>D</span><span>HP</span></div>
+            <div><span>Zephyr</span><span>Alpha</span><span>14</span><span>9</span><span>100</span></div>
+            <div><span>Rift</span><span>Bravo</span><span>12</span><span>11</span><span>63</span></div>
+            <div><span>Kestrel</span><span>Alpha</span><span>11</span><span>10</span><span>0</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="f-copy reveal">
+        <span class="label eyebrow">Live data</span>
+        <h3>Five games feed the graphics directly. The rest get a manual desk.</h3>
+        <p>Where the publisher provides a live feed, it drives the scores, clocks and player stats with no typing: CS2 and Dota 2 through Game State Integration, Rocket League through its Stats API, League of Legends through the Live Client Data API, and Apex through the LiveAPI in private matches.</p>
+        <p>VALORANT has no live API, so it gets a manual round desk. After a map you can paste the end-of-game scoreboard text; Clear to Air reads the player rows, shows them by team, and applies them when you confirm. Fighting games and EA FC use the manual desk too, and every game can import teams and brackets from start.gg. Each game has a simulator, so you can rehearse a full match with nobody playing.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============ RUNS ON YOUR OBS ============ -->
+<section class="section" id="obs" aria-labelledby="obs-h">
+  <div class="wrap">
+    <div class="arch">
+      <div class="arch-copy reveal">
+        <span class="label eyebrow">Runs on your OBS</span>
+        <h2 id="obs-h" style="font-size:clamp(28px,3.4vw,38px);line-height:1.1;margin-bottom:16px">It does not replace OBS. It stands next to it.</h2>
+        <p>Clear to Air never sits between OBS and your encoder. A small agent runs on the broadcast PC, talks to OBS over OBS's own websocket, serves the overlays as local browser sources, and runs preflight, drift detection and the watchdogs on that machine.</p>
+        <p>The control room is a web page the agent serves at 127.0.0.1:7700. Remote seats are built and in beta: a producer or scorer on another laptop drives the desk through a relay that the broadcast PC dials out to. You can run that relay yourself today; a hosted one is coming.</p>
+        <ul class="arch-list">
+          <li><b>Local first.</b> If the venue internet drops, the agent, the overlays and the show keep running. One exception: VALORANT map art loads from valorant-api.com, so it will be missing offline.</li>
+          <li><b>Nothing installed inside OBS.</b> No plugin to break on the next OBS update. It uses obs-websocket, which ships with OBS.</li>
+          <li><b>A normal OBS scene collection.</b> Clear to Air builds it and installs it into OBS's own collection folder. From there OBS treats it like any other collection.</li>
+        </ul>
+      </div>
+      <div class="diagram reveal" role="img" aria-label="Architecture: OBS and the local agent run on the broadcast PC and talk over obs-websocket; the agent serves overlays to OBS as browser sources; the control room, in a browser on the same PC or through a relay, talks to the agent.">
+        <svg viewBox="0 0 520 420" xmlns="http://www.w3.org/2000/svg">
+          <!-- broadcast PC zone -->
+          <rect class="zone" x="14" y="112" width="492" height="290" rx="12"/>
+          <text class="zone-l" x="30" y="392">BROADCAST PC · 127.0.0.1</text>
+
+          <!-- control room -->
+          <rect class="box" x="150" y="18" width="220" height="70" rx="10"/>
+          <rect class="lamp-svg" x="170" y="40" width="12" height="12" rx="3"/>
+          <text class="t" x="192" y="52">Control room</text>
+          <text class="s" x="192" y="70">browser · local or via relay</text>
+
+          <!-- wire control room -> agent -->
+          <path class="wire dash" d="M260 88 V150"/>
+          <text class="lbl" x="268" y="122">ws + http</text>
+
+          <!-- agent -->
+          <rect class="box" x="130" y="150" width="260" height="96" rx="10"/>
+          <text class="t" x="150" y="182">Local agent</text>
+          <text class="s" x="150" y="200">:7700 · Windows zip, no installer</text>
+          <text class="s2" x="150" y="222">preflight · drift · watchdogs · adapters</text>
+          <text class="s2" x="150" y="238">serves overlays · saves replays</text>
+
+          <!-- wire agent <-> obs -->
+          <path class="wire" d="M200 246 V300"/>
+          <path class="wire" d="M196 292 200 300 204 292"/>
+          <path class="wire" d="M196 254 200 246 204 254"/>
+          <text class="lbl" x="208" y="276">obs-websocket 4455</text>
+
+          <!-- wire agent -> browser sources -->
+          <path class="wire dash" d="M340 246 V300"/>
+          <path class="wire dash" d="M336 292 340 300 344 292"/>
+          <text class="lbl" x="348" y="276">overlay URLs</text>
+
+          <!-- obs -->
+          <rect class="box obs" x="60" y="300" width="400" height="76" rx="10"/>
+          <text class="t" x="80" y="332">OBS Studio</text>
+          <text class="s" x="80" y="350">your scenes · your encoder</text>
+          <rect x="300" y="316" width="140" height="44" rx="6" fill="none" stroke="rgba(255,255,255,.14)"/>
+          <text class="s2" x="312" y="334">browser sources</text>
+          <text class="s" x="312" y="350">4 pages per pack</text>
+
+          <!-- game -->
+          <path class="wire dash" d="M30 188 H130"/>
+          <path class="wire dash" d="M122 184 130 188 122 192"/>
+          <text class="lbl" x="30" y="178">game feed</text>
+          <text class="lbl" x="30" y="206">GSI / API</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GAMES ============ -->
+<section class="section" id="games" aria-labelledby="games-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="label eyebrow">Game packs</span>
+      <h2 id="games-h">Eight games. One desk.</h2>
+      <p>Each pack is a set of overlays and a matching match model: series formats, map pools, veto or draft, roster sizes. Switch game and the whole control room follows.</p>
+    </div>
+    <div class="games">
+      <div class="game reveal"><div class="g">CS2</div><div class="full">Counter-Strike 2</div><span class="st">Live data · GSI</span></div>
+      <div class="game reveal" data-delay="1"><div class="g">VALORANT</div><div class="full">Riot Games</div><span class="st man">Manual · scoreboard paste</span></div>
+      <div class="game reveal" data-delay="2"><div class="g">Rocket League</div><div class="full">Psyonix</div><span class="st">Live data · Stats API</span></div>
+      <div class="game reveal" data-delay="3"><div class="g">LoL</div><div class="full">League of Legends</div><span class="st">Live data · Live client</span></div>
+      <div class="game reveal"><div class="g">Dota 2</div><div class="full">Valve</div><span class="st">Live data · GSI</span></div>
+      <div class="game reveal" data-delay="1"><div class="g">Apex</div><div class="full">Apex Legends, private matches</div><span class="st">Live data · LiveAPI</span></div>
+      <div class="game reveal" data-delay="2"><div class="g">FGC</div><div class="full">Street Fighter 6, Tekken 8, Guilty Gear Strive, Mortal Kombat 1</div><span class="st man">Manual · start.gg</span></div>
+      <div class="game reveal" data-delay="3"><div class="g">EA FC</div><div class="full">EA Sports FC</div><span class="st man">Manual · start.gg</span></div>
+    </div>
+    <p class="games-note reveal">Green: a live feed from the publisher drives the graphics. Brass: the operator drives them from a manual desk built for the game's format. Game names belong to their publishers.</p>
+  </div>
+</section>
+
+<!-- ============ OPEN SOURCE ============ -->
+<section class="section" id="open-source" aria-labelledby="oss-h">
+  <div class="wrap">
+    <div class="oss">
+      <div class="section-head reveal">
+        <span class="label eyebrow">Free and open source</span>
+        <h2 id="oss-h">Free to use, free to change, yours to run.</h2>
+        <p>Clear to Air costs nothing. There is no licence key, no watermark and no account. Run it on your own PC for as many shows as you like, for as long as you like.</p>
+        <div class="oss-cta">
+          <!-- repo link: set once in site.js REPO -->
+          <a class="btn btn-primary btn-lg" href="#open-source" data-repo-path="" data-repo-soon="Source opens at public launch">Source on GitHub</a>
+        </div>
+      </div>
+      <dl class="oss-list reveal">
+        <div>
+          <dt><span class="lic">AGPL-3.0+</span>The app</dt>
+          <dd>The agent, the control room and the relay, under the GNU Affero GPL, AGPL-3.0 or later. Use it, change it and run it for free. If you ship a changed version, including as a hosted service, you publish your changes too.</dd>
+        </div>
+        <div>
+          <dt><span class="lic">MIT</span>The packs and the overlay renderer</dt>
+          <dd>The game packs and the shared overlay renderer they load, so a pack stands on its own. Restyle the packs that ship with it, or build your own. Packs you make are yours to share or sell.</dd>
+        </div>
+        <div>
+          <dt><span class="lic">TM</span>The name and the lamp</dt>
+          <dd>"Clear to Air", the lamp mark and the wordmark are trademarks and stay with the project. Forks are welcome under a different name.</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SUPPORT ============ -->
+<section class="section" id="support" aria-labelledby="support-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="label eyebrow">Support the project</span>
+      <h2 id="support-h">How the work gets paid for.</h2>
+      <p>The app stays free whichever of these happens. Supporters, sponsors and paid services pay for the time that goes into it.</p>
+    </div>
+    <div class="support-grid">
+      <div class="support-card reveal">
+        <span class="tag">Donation</span>
+        <h3>Become a supporter</h3>
+        <p>Give monthly or once. It keeps releases coming and pays for testing on real shows.</p>
+        <!-- PLACEHOLDER: supporter / donation page link (GitHub Sponsors, Open Collective, Ko-fi or Paystack); until then it mails hello@ via contacts.json -->
+        <a class="btn btn-block" href="#support" data-contact="hello" data-contact-subject="Supporting Clear to Air">Become a supporter</a>
+      </div>
+      <div class="support-card reveal" data-delay="1">
+        <span class="tag">Sponsorship</span>
+        <h3>Sponsor</h3>
+        <p>Your logo on this site, in the README and on the About screen inside the app. For esports organisations, hardware brands, venues and leagues.</p>
+        <a class="btn btn-block" href="#support" data-contact="hello" data-contact-subject="Sponsoring Clear to Air">Talk to us about sponsoring</a>
+      </div>
+      <div class="support-card reveal" data-delay="2">
+        <span class="tag">Coming</span>
+        <h3>Hosted control room</h3>
+        <p>Hand the desk to a producer or scorer on a laptop anywhere. Running the relay yourself is free. Our hosted relay will be free while it is in beta, and later becomes a supporter perk.</p>
+        <a class="btn btn-block" href="#open-source" data-repo-path="/tree/main/relay" data-repo-soon="Relay source at public launch">Run the relay yourself</a>
+      </div>
+      <div class="support-card reveal" data-delay="3">
+        <span class="tag">Paid service</span>
+        <h3>Setup and custom packs</h3>
+        <p>We set Clear to Air up for your league or event, run it on the day if you want, train your crew, and build branded overlay packs to your design.</p>
+        <a class="btn btn-block" href="#support" data-contact="hello" data-contact-subject="Setup and custom packs">Ask about setup</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="section" id="faq" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="label eyebrow">Questions</span>
+      <h2 id="faq-h">The ones organisers ask first.</h2>
+    </div>
+    <div class="faq reveal">
+      <details>
+        <summary>Is it really free?</summary>
+        <p>Yes. The app is AGPL-3.0+ and the overlay packs and their renderer are MIT. Nothing in the app is held back for paying users. The project is paid for by supporters, sponsors, and setup and custom-pack work for leagues and events.</p>
+      </details>
+      <details>
+        <summary>How finished is it?</summary>
+        <p>It is early. It has been tested against the built-in simulators and on one real OBS setup, and testing with real games is in progress. Rehearse a full show with it before you put it on air.</p>
+      </details>
+      <details>
+        <summary>Does it replace OBS?</summary>
+        <p>No. OBS keeps doing the capture, mixing, encoding and streaming. Clear to Air builds the scenes, feeds the overlays, cuts between scenes, and watches for the problems OBS does not warn you about.</p>
+      </details>
+      <details>
+        <summary>Does it work offline?</summary>
+        <p>Yes. The agent runs on the broadcast PC and serves the overlays itself, so a show keeps running with no internet. VALORANT map art is fetched from valorant-api.com and will be missing offline. Remote seats go through the relay, so they need a connection to it.</p>
+      </details>
+      <details>
+        <summary>Which games have live data?</summary>
+        <p>CS2, Dota 2, Rocket League, League of Legends and Apex (in private matches), each through the publisher's own feed. VALORANT, fighting games and EA FC are run from a manual desk, with team and bracket import from start.gg. For VALORANT you can also paste the end-of-game scoreboard text to fill in player stats.</p>
+      </details>
+      <details>
+        <summary>Can I bring my own design?</summary>
+        <p>Yes. Colours, logo and font are set per event, and team colours per team. The packs are HTML and CSS under the MIT licence, so a designer can restyle one or replace it, and the control room keeps driving it.</p>
+      </details>
+      <details>
+        <summary>Is it allowed by the publishers?</summary>
+        <p>Game State Integration is an official Valve feature for CS2 and Dota 2. Rocket League's Stats API is part of the game, and the Apex LiveAPI is Respawn's own. Riot's policy allows broadcast overlays in OBS and bans overlays that give players a real-time advantage in game; Clear to Air only makes the first kind. Nothing here reads game memory or injects into a game client.</p>
+      </details>
+    </div>
+    <p class="faq-more">Something else? <a href="#open-source" data-repo-path="/discussions" data-repo-soon="Ask in Discussions (opens at public launch)">Ask in GitHub Discussions</a>.</p>
+  </div>
+</section>
+
+<!-- ============ NOTIFY ============ -->
+<section class="section ea" id="notify" aria-labelledby="ea-h">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="label eyebrow">Public launch</span>
+      <h2 id="ea-h">Get notified.</h2>
+      <p>The public release is not out yet. Leave an address and we will email you once, when it is.</p>
+    </div>
+    <form class="reveal" id="ea-form" novalidate>
+      <label class="skip" for="ea-email" style="position:absolute;left:-9999px;top:auto">Email address</label>
+      <input class="field" id="ea-email" type="email" name="email" placeholder="you@yourleague.gg" autocomplete="email" required>
+      <input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+      <button class="btn btn-lg" type="submit">Get notified</button>
+    </form>
+    <p class="ea-msg" id="ea-msg" role="status" aria-live="polite" hidden></p>
+    <p class="ea-small reveal">One email at launch. No newsletter.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="copy">
+      <span class="wordmark wordmark-foot"><svg class="logo" viewBox="49.27 362.23 500.02 75.44" aria-hidden="true" focusable="false"><defs><mask id="cta-a-foot" maskUnits="userSpaceOnUse" x="49.27" y="362.23" width="500.02" height="75.44"><rect x="49.27" y="362.23" width="500.02" height="75.44" fill="#fff"/><path fill="#000" d="M423.27,420.17c-1.92-.06-3.5-.9-3.94-2.45-.36-1.25.27-3.41,1.74-4.22,2.78-1.53,5.86-1.56,9.24-1.36.41,2.21.07,4.23-1.45,5.97-1.14,1.3-3.24,2.13-5.6,2.06Z"/><path fill="#000" d="M193.6,420.18c-2.18.01-3.78-.98-4.14-2.68-.32-1.52.49-3.53,2.16-4.25,2.81-1.23,5.7-1.3,8.97-1.1.28,2.19-.09,4.13-1.49,5.91-1.05,1.33-3.28,2.11-5.49,2.13Z"/></mask></defs><g class="cta-word" mask="url(#cta-a-foot)"><path d="M346.87,399.42c-3.72-.75-7.45-.37-10.1,2.59-2.82,4.27-3.22,10.48.19,14.66s10.19,3.94,13.58.09c2.51-2.85,2.68-6.51,2.4-10.1-1.07-12.39-9.14-17.86-21.15-18.21,6.22-2.43,12.88-2.61,19.18-1.34,11.03,2.22,17.59,11.56,17.47,22.52-.11,10.07-5.67,18.74-15.63,21.46-12.37,3.37-27.02.03-31.87-12.46-2.35-6.05-2.26-12.82.1-18.81,2.17-5.5,7.04-8.82,12.55-8.97s10.95,2.69,13.29,8.6Z"/><path d="M161.88,429.66c-9.05,4.08-22.41,4.05-29.94-2.8-4.1-3.72-5.45-9.62-2.87-14.65,2.15-4.18,6.62-7.17,11.43-7.22l13.93-.15c-.09-3.4-2.45-5.62-5.63-6.13-5.97-.68-11.8,1.37-16.33,5.33-3.65,3.23-5.62,7.42-6.28,12.46-3.39-12.07,1.87-26.19,14.57-29.34,4.72-1.17,9.55-1.13,14.14.23,9.28,2.74,14.46,11.25,13.52,20.72-.43,4.33-3.08,7.32-7.63,7.32h-20.3c.51,2.5,2.65,3.66,5.11,4.19,8.05,1.72,14.54-2.9,18.38-.07,1.62,1.2,2.1,3.59,1.8,5.46s-1.87,3.73-3.9,4.64Z"/><path d="M437.77,431.03c-3.5-.1-5.95-1.35-7.25-4.65-3.61,6.58-15.05,7.09-20.58,3.44-6.98-4.62-8.3-15.05-2.59-21.2,6.03-6.49,17.93-6.61,26.88-5.35,5.69.8,10.68,5.36,11.4,11.18.41,3.35.3,6.86,0,10.08-.37,4.12-3.76,6.62-7.87,6.5ZM423.27,420.17c2.36.08,4.46-.75,5.6-2.06,1.52-1.74,1.86-3.76,1.45-5.97-3.38-.19-6.46-.16-9.24,1.36-1.47.81-2.09,2.96-1.74,4.22.44,1.55,2.02,2.39,3.94,2.45Z"/><path d="M207.59,431.03c-3.47-.17-5.87-1.61-6.83-4.65-4.22,6.96-16.05,7.08-21.42,2.91-5.62-4.36-7.14-12.87-3.22-18.89,5.35-8.23,19.12-8.65,28.72-7.02,7.08,1.2,11.59,7.51,11.28,14.44l-.29,6.66c-.19,4.27-3.92,6.77-8.23,6.56ZM193.6,420.18c2.21-.01,4.45-.8,5.49-2.13,1.4-1.77,1.77-3.71,1.49-5.91-3.27-.2-6.16-.13-8.97,1.1-1.67.73-2.49,2.73-2.16,4.25.36,1.71,1.96,2.7,4.14,2.68Z"/><path d="M72.69,401.67c-2.44,2.96-2.99,6.79-2.7,10.42.66,8.23,5.12,15.06,11.98,20.05-7.16.61-14.42-.94-20.15-5.44-6.59-5.17-8.46-15.71-6.43-24.15,3.55-14.78,20.73-19.28,33.81-14.39,2.39.89,4.43,2.7,5,5.13.45,1.94-.11,4.03-1.3,5.34s-3.33,2.02-5.18,1.71l-7.06-1.2c-2.72-.46-6.04.2-7.96,2.53Z"/><path d="M115.37,415.97c-7.92-.74-15.2-6.67-15.19-14.1l.04-27.54c0-4.27,3.41-6.75,7.31-6.83s7.7,2.42,7.71,6.86l.13,41.61Z"/><path d="M316.15,399.06c-3.89,3.71-16.94-3.61-23.75,12.6l-.08-11.2c-2.09-.05-3.95-.33-5.19-1.58-2.21-2.22-2.25-7.28-.1-9.66,1.17-1.29,3.19-1.56,5.16-1.57l.61-6.87c.34-3.84,3.93-5.62,7.56-5.5,3.08.1,5.98,1.52,6.81,4.78.58,2.29.57,5.01.65,7.56l6.41.4c3.41.21,5.36,7.74,1.91,11.04Z"/><path d="M526.07,407.51c-6.51-1.85-12.87.96-15.33,7.04l.05-19.84c.01-4.63,3.81-7.37,8.12-7.06,2.82.2,5.04,1.45,6.4,4.17,3.17-5.46,11.44-7.01,16.42-4.08,2.81,1.65,2.63,5.35,1.59,7.78-2.63,6.15-10.6,1.63-14.47,4.61-2.3,1.78-2.82,4.74-2.77,7.38Z"/><path d="M237.1,407.51c-6.21-1.78-12.55.77-15.17,6.96v-19.81c.02-4.62,3.92-7.37,8.16-7.02,2.9.25,4.89,1.43,6.42,4.21,2.57-4.49,7.52-5.93,12.48-5.42,2.95.3,5.76,1.74,6.08,4.88.22,2.17-.46,4.59-1.78,5.93-3.4,3.47-8.71.34-13.41,2.7-1.88,2.05-2.61,4.22-2.78,7.56Z"/><path d="M446.1,410.66c-3.72-10.64-16.43-12.22-27.49-10.81-2.66.34-5.52.42-8.02-.2-2.72-.68-3.62-3.39-3.64-5.76s1.78-4.26,4.38-5.17c7.19-2.52,14.93-3.06,22.45-1.59,10.79,2.1,12.84,12.94,12.32,23.53Z"/><path d="M216.31,410.63c-3.89-10.64-16.71-12.19-27.39-10.79-2.78.36-5.79.47-8.37-.26s-3.38-3.32-3.42-5.71c-.04-2.25,1.6-4.18,4.11-5.07,7.31-2.6,15.21-3.18,22.86-1.62,10.96,2.23,12.52,13.37,12.21,23.45Z"/><path d="M317.15,421.62c1.63,1.63,1.69,4.12,1.09,6.08-1.72,5.65-13.54,5.83-19.27,2.12-6.01-3.9-7.75-12.52-4.39-18.64,2.66-4.85,7.72-7.06,13.12-7.37l.21,12.08c.1,5.74,6.46,2.95,9.24,5.72Z"/><path d="M525.94,423.71c-.04,4.8-3.65,7.63-8.01,7.36-3.23-.2-5.88-1.77-6.72-5.11-.72-2.87-.96-6.46.17-9.34,2.3-5.82,8.74-8.12,14.67-6.28l-.11,13.36Z"/><path d="M237.02,424.01c-.04,4.45-3.45,7.09-7.36,7.07s-6.82-1.94-7.48-5.83c-.41-2.38-.62-5.54.13-7.93,1.97-6.26,8.75-8.93,14.84-6.97l-.13,13.65Z"/><path d="M120.93,425.19c-.63,5.92-9.73,7.98-15.33,4.72-6.52-3.8-5.61-14.13-5.32-22.43,1.39,4.23,3.89,7.32,7.95,9.25,3.18,1.51,6.74,1.66,10.21,2.4,2.41.51,2.7,4.05,2.49,6.06Z"/><path d="M80.46,428.18c-2.67-2.6-4.08-5.94-4.98-9.2,5.45,2.04,10.57-1.74,15.37-.32,2.96.87,4.42,5.18,2.99,7.8-2.69,4.93-9.32,5.67-13.38,1.71Z"/></g><g class="cta-lamp is-ok"><path d="M457.28,417.71c-2.74-2.54-2-6.49.05-8.83s5.85-3.77,8.51-1.42l9,7.97,19.04-23.05c2.16-2.61,6.41-1.5,8.41.19,2.33,1.97,3.8,6.07,1.54,8.77l-23.38,27.92c-2.61,3.12-7,3.41-9.99.65l-13.18-12.21Z"/><circle cx="473.86" cy="391.93" r="9.94"/></g></svg><span class="sr-only">Clear to Air</span></span>
+      <span>Built in South Africa by a working broadcaster. Free and open source: app AGPL-3.0+, packs and overlay renderer MIT.</span>
+      <span>"Clear to Air" and the lamp mark are trademarks of the project. Game names and logos belong to their publishers.</span>
+    </div>
+    <nav aria-label="Footer">
+      <a href="#how">How it works</a>
+      <a href="#open-source">Open source</a>
+      <a href="#support">Support</a>
+      <a href="#faq">FAQ</a>
+      <!-- repo link: set once in site.js REPO -->
+      <a href="#open-source" data-repo-path="" data-repo-soon="GitHub (at launch)">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>

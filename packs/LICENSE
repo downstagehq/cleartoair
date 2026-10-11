@@ -1,0 +1,51 @@
+MIT License
+
+Copyright (c) 2026 the Clear to Air authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+What this licence covers (and what it does not)
+-------------------------------------------------------------------------------
+
+The MIT grant above applies to the files in this packs/ folder written by the
+Clear to Air authors: each pack's pack.json, its overlay pages
+(overlay/*.html) and its skin.css. The shared overlay renderer in overlays/_shared/
+that pack pages load at runtime is also MIT (see overlays/_shared/LICENSE), so a
+pack stands entirely under MIT. The rest of Clear to Air (agent, control room,
+relay, tools) is licensed under the GNU AGPL v3 or later (see LICENSE at the
+repository root).
+
+It does NOT grant any right to:
+
+  * the name "Clear to Air", the lamp mark or the wordmark. These are
+    trademarks and are not licensed under MIT or the AGPL. See TRADEMARKS.md.
+
+  * game names, logos, map names, map art, character, hero, champion, agent
+    and legend names, or any other artwork that appears in or is referenced
+    by a pack file (including image URLs). These belong to their publishers
+    and are used only to identify the game. See THIRD_PARTY_NOTICES.md.
+
+  * team logos and player photos. The agent can cache these from Liquipedia
+    into packs/<game>/assets/teams/ and packs/_players/ on the operator's own
+    PC. They belong to the teams and the photographers; both folders are
+    excluded from the repository.
+
+  * fonts. The fonts the overlays use live in overlays/_shared/fonts/ and are
+    licensed under the SIL Open Font License 1.1 by their own authors.

@@ -1,0 +1,5 @@
+{
+  "_readme": "Supporters and sponsors credited on the About screen in the control room (open it from the i button at the bottom of the rail, the version in the status bar, or About in the command palette). This file is imported when the control room is built, so a change here ships with the next release and shows on remote seats too. sponsors is a list of objects: name (string, required), url (https link, optional), logo (optional: a path to a file you add under web/public, for example /sponsors/acme.svg for web/public/sponsors/acme.svg, or a data:image URI; never a remote URL, because the app runs offline and does not hotlink), tier (string, optional, for example Gold). supporters is a list of objects: name (string, required), url (https link, optional). Entries are shown in the order they appear here. Anything that does not fit this shape is skipped.",
+  "sponsors": [],
+  "supporters": []
+}

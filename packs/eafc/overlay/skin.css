@@ -1,0 +1,7 @@
+/* EA SPORTS FC — pack skin. Colours come from pack.json theme (via CTA.applyBrand)
+   unless the event brand overrides them; this file only carries game-specific tweaks. */
+/* EA FC — broadcast football bug: compact, square-ish plates, clock in mono */
+:root { --chamfer: 6px; }
+[data-game="eafc"] .bug-main { height: 72px; }
+[data-game="eafc"] .bug .tp .sc { font-size: 72px; }
+[data-game="eafc"] .bug .mid .v { font-size: 30px; }

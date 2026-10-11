@@ -1,0 +1,7 @@
+{
+  "_readme": "THE contact switch. While confirmed is false: the site's contact buttons stay inert, and tools/public-export.mjs lists these addresses as to-dos and a --final export refuses them. Set confirmed to true only once each mailbox has received a test mail (Cloudflare Email Routing on downstage.co.za).",
+  "confirmed": true,
+  "security": "security@downstage.co.za",
+  "conduct": "conduct@downstage.co.za",
+  "hello": "hello@downstage.co.za"
+}

@@ -1,0 +1,29 @@
+{
+  "id": "eafc",
+  "name": "EA SPORTS FC",
+  "short": "EAFC",
+  "sides": ["HOME", "AWAY"],
+  "roundsToWin": 0,
+  "defaultFormat": "2LEG",
+  "formats": ["BO1", "2LEG", "BO3"],
+  "maps": [
+    { "id": "stadium-generic",   "name": "Stadium",          "art": "assets/maps/stadium-generic.jpg",   "active": true },
+    { "id": "stadium-national",  "name": "National Stadium", "art": "assets/maps/stadium-national.jpg",  "active": true },
+    { "id": "stadium-arena",     "name": "Arena",            "art": "assets/maps/stadium-arena.jpg",     "active": true },
+    { "id": "stadium-park",      "name": "The Park",         "art": "assets/maps/stadium-park.jpg",      "active": true },
+    { "id": "stadium-cup",       "name": "Cup Final Venue",  "art": "assets/maps/stadium-cup.jpg",       "active": true }
+  ],
+  "roles": ["PLAYER"],
+  "rosterSize": 1,
+  "liquipedia": "easportsfc",
+  "adapters": ["manual", "startgg"],
+  "sims": ["eafc"],
+  "statLines": [{"label": "Possession", "unit": "%"}, {"label": "Shots"}, {"label": "On target"}, {"label": "Corners"}, {"label": "Fouls", "lowerIsBetter": true}, {"label": "Pass accuracy", "unit": "%"}],
+  "stats": { "scoreboardColumns": ["goals", "assists", "shots", "passes", "tackles"], "mvpStat": "goals" },
+  "caps": {"veto": false, "draft": false, "standings": false, "set": false, "games": false, "matchStats": true, "maps": false, "sides": false, "rounds": false, "halves": true, "series": true, "headToHead": true, "cards": ["none", "vs", "matchstats", "roster", "bracket", "scoreboard", "mvp", "h2h", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "eafc" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#00A86B", "secondary": "#0B0D10" },
+  "capture": { "kind": "monitor_capture", "window": "" },
+  "notes": "No live data API. Score + clock are driven from the Match tab (or the eafc simulator for rehearsal). Format 2LEG = two-legged tie with aggregate; BO1/BO3 also valid."
+}

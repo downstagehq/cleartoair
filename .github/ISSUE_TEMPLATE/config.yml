@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/downstagehq/cleartoair/security/policy
+    about: Please do not open a public issue for security problems. Follow SECURITY.md and report privately.
+  # GitHub Discussions must be switched on in the repo settings (Phase B) for this to resolve.
+  - name: Questions and help
+    url: https://github.com/downstagehq/cleartoair/discussions
+    about: Ask how to set something up, or share how you used Clear to Air on a show.

@@ -1,0 +1,32 @@
+{
+  "id": "cs2",
+  "name": "Counter-Strike 2",
+  "short": "CS2",
+  "sides": ["CT", "T"],
+  "roundsToWin": 13,
+  "defaultFormat": "BO3",
+  "formats": ["BO1", "BO3", "BO5"],
+  "maps": [
+    { "id": "de_ancient",  "name": "Ancient",  "art": "assets/maps/ancient.jpg",  "active": true },
+    { "id": "de_anubis",   "name": "Anubis",   "art": "assets/maps/anubis.jpg",   "active": true },
+    { "id": "de_dust2",    "name": "Dust II",  "art": "assets/maps/dust2.jpg",    "active": true },
+    { "id": "de_inferno",  "name": "Inferno",  "art": "assets/maps/inferno.jpg",  "active": true },
+    { "id": "de_mirage",   "name": "Mirage",   "art": "assets/maps/mirage.jpg",   "active": true },
+    { "id": "de_nuke",     "name": "Nuke",     "art": "assets/maps/nuke.jpg",     "active": true },
+    { "id": "de_overpass", "name": "Overpass", "art": "assets/maps/overpass.jpg", "active": true },
+    { "id": "de_train",    "name": "Train",    "art": "assets/maps/train.jpg",    "active": true },
+    { "id": "de_vertigo",  "name": "Vertigo",  "art": "assets/maps/vertigo.jpg",  "active": false },
+    { "id": "de_cache",    "name": "Cache",    "art": "assets/maps/cache.jpg",    "active": false }
+  ],
+  "roles": ["IGL", "AWP", "ENTRY", "SUPPORT", "LURK"],
+  "rosterSize": 5,
+  "liquipedia": "counterstrike",
+  "adapters": ["cs2gsi", "manual"],
+  "sims": ["cs2"],
+  "stats": { "scoreboardColumns": ["k", "d", "a", "adr", "hs"], "mvpStat": "adr" },
+  "caps": {"veto": true, "draft": false, "standings": false, "set": false, "games": false, "matchStats": false, "maps": true, "sides": true, "rounds": true, "halves": true, "series": true, "headToHead": true, "cards": ["none", "vs", "veto", "roster", "bracket", "scoreboard", "mvp", "h2h", "schedule"]},
+  "overlay": { "pages": ["ingame.html", "cards.html", "standby.html", "desk.html"], "bugStyle": "rounds" },
+  "scenes": "recipe.default",
+  "theme": { "primary": "#F5A623", "secondary": "#111318" },
+  "capture": { "kind": "game_capture", "window": "Counter-Strike 2:SDL_app:cs2.exe" }
+}
