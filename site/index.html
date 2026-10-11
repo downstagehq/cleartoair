@@ -10,12 +10,16 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="site.webmanifest">
+<meta property="og:type" content="website">
 <meta property="og:title" content="Clear to Air">
 <meta property="og:description" content="The free, open-source control room for esports broadcasts. Pairs with your OBS. Ships with the graphics.">
 <link rel="canonical" href="https://cleartoair.com/">
 <meta property="og:url" content="https://cleartoair.com/">
 <meta property="og:image" content="https://cleartoair.com/og.png">
 <meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Clear to Air","url":"https://cleartoair.com/","description":"A free, open-source control room for esports broadcasts. Pairs with OBS, ships graphics for eight titles and checks the show before it goes live.","applicationCategory":"MultimediaApplication","operatingSystem":"Windows","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://www.gnu.org/licenses/agpl-3.0","codeRepository":"https://github.com/downstagehq/cleartoair","publisher":{"@type":"Organization","name":"Downstage","url":"https://downstage.co.za"}}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -54,7 +58,7 @@
         <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
       </div>
       <p class="hero-note">Free and open source, for tournament organisers who broadcast on OBS. Runs on Windows.</p>
-      <p class="hero-note hero-status"><span class="status-dot" aria-hidden="true"></span>Early software. Tested against the built-in simulators and on one real OBS setup; testing with real games is in progress.</p>
+      <p class="hero-note hero-status"><span class="status-dot" aria-hidden="true"></span>Early software. Tested with the built-in simulators, sample game data and one real OBS setup. It has not yet run with a live game or on a real show.</p>
     </div>
 
     <div class="frame-wrap">
@@ -209,7 +213,7 @@
     <h2 id="proof-h" class="label eyebrow">In the box</h2>
     <div class="proof-grid">
       <div class="proof-tile reveal"><div class="num">8</div><div class="what">game packs, each with its own overlays, match model and simulator</div></div>
-      <div class="proof-tile reveal" data-delay="1"><div class="num">5</div><div class="what">games with a live data feed from the publisher driving the graphics</div></div>
+      <div class="proof-tile reveal" data-delay="1"><div class="num">5</div><div class="what">games with an adapter for the publisher's live data feed</div></div>
       <div class="proof-tile reveal" data-delay="2"><div class="num">8</div><div class="what">OBS scenes, built from the control room and installed into OBS</div></div>
       <div class="proof-tile reveal" data-delay="3"><div class="num">Free</div><div class="what">AGPL-3.0+ for the app, MIT for the packs and the overlay renderer</div></div>
     </div>
@@ -330,8 +334,8 @@
       </div>
       <div class="f-copy reveal">
         <span class="label eyebrow">Graphics</span>
-        <h3>Series bug, lower thirds, ticker and full-frame cards for every game.</h3>
-        <p>Each pack has four pages that OBS loads as browser sources: in-game (series bug, ticker and lower third), full-frame cards, standby and the caster desk. The cards cover head-to-head, rosters, bracket, scoreboard, MVP and schedule, plus what the game's format needs: map veto for CS2 and VALORANT, the draft for Dota 2 and LoL, standings for Apex, the set for fighting games, match stats for EA FC and game-by-game for Rocket League.</p>
+        <h3>Scorebug, lower thirds, ticker and full-frame cards for every game.</h3>
+        <p>Each pack has four pages that OBS loads as browser sources: in-game (scorebug, ticker and lower third), full-frame cards, standby and the caster desk. Every pack has roster, bracket, scoreboard and schedule cards, all but Apex add head-to-head and MVP, plus what the game's format needs: map veto for CS2 and VALORANT, the draft for Dota 2 and LoL, standings for Apex, the set for fighting games, match stats for EA FC and game-by-game for Rocket League.</p>
         <p>Packs are HTML and CSS under the MIT licence, as is the shared renderer they draw with, so you can restyle one, build your own, and share or sell it. Event colours, logo and font are set once in Setup and flow into every page.</p>
       </div>
     </article>
@@ -359,8 +363,9 @@
       </div>
       <div class="f-copy reveal">
         <span class="label eyebrow">Live data</span>
-        <h3>Five games feed the graphics directly. The rest get a manual desk.</h3>
+        <h3>Five games can feed the graphics directly. The rest get a manual desk.</h3>
         <p>Where the publisher provides a live feed, it drives the scores, clocks and player stats with no typing: CS2 and Dota 2 through Game State Integration, Rocket League through its Stats API, League of Legends through the Live Client Data API, and Apex through the LiveAPI in private matches.</p>
+        <p>Each adapter is built from the publisher's documentation and tested with simulators and sample data. None has run against a live game yet. A Record raw game data switch on each adapter saves what the game sends, so the first real matches can be checked against it.</p>
         <p>VALORANT has no live API, so it gets a manual round desk. After a map you can paste the end-of-game scoreboard text; Clear to Air reads the player rows, shows them by team, and applies them when you confirm. Fighting games and EA FC use the manual desk too, and every game can import teams and brackets from start.gg. Each game has a simulator, so you can rehearse a full match with nobody playing.</p>
       </div>
     </article>
@@ -375,7 +380,7 @@
         <span class="label eyebrow">Runs on your OBS</span>
         <h2 id="obs-h" style="font-size:clamp(28px,3.4vw,38px);line-height:1.1;margin-bottom:16px">It does not replace OBS. It stands next to it.</h2>
         <p>Clear to Air never sits between OBS and your encoder. A small agent runs on the broadcast PC, talks to OBS over OBS's own websocket, serves the overlays as local browser sources, and runs preflight, drift detection and the watchdogs on that machine.</p>
-        <p>The control room is a web page the agent serves at 127.0.0.1:7700. Remote seats are built and in beta: a producer or scorer on another laptop drives the desk through a relay that the broadcast PC dials out to. Use ours at room.cleartoair.com, free while it is in beta, or run the relay yourself.</p>
+        <p>The control room is a web page the agent serves at 127.0.0.1:7700. Remote seats are in beta: a producer, scorer or viewer on another laptop uses the desk through a relay that the broadcast PC dials out to. They have been tested over the internet, not yet on a real show. Use ours at room.cleartoair.com, free while it is in beta, or run the relay yourself.</p>
         <ul class="arch-list">
           <li><b>Local first.</b> If the venue internet drops, the agent, the overlays and the show keep running. One exception: VALORANT map art loads from valorant-api.com, so it will be missing offline.</li>
           <li><b>Nothing installed inside OBS.</b> No plugin to break on the next OBS update. It uses obs-websocket, which ships with OBS.</li>
@@ -453,7 +458,7 @@
       <div class="game reveal" data-delay="2"><div class="g">FGC</div><div class="full">Street Fighter 6, Tekken 8, Guilty Gear Strive, Mortal Kombat 1</div><span class="st man">Manual · start.gg</span></div>
       <div class="game reveal" data-delay="3"><div class="g">EA FC</div><div class="full">EA Sports FC</div><span class="st man">Manual · start.gg</span></div>
     </div>
-    <p class="games-note reveal">Green: a live feed from the publisher drives the graphics. Brass: the operator drives them from a manual desk built for the game's format. Game names belong to their publishers.</p>
+    <p class="games-note reveal">Green: an adapter reads the publisher's live feed. Brass: the operator drives them from a manual desk built for the game's format. Game names belong to their publishers.</p>
   </div>
 </section>
 
@@ -500,7 +505,7 @@
       <div class="support-card reveal">
         <span class="tag">Donation</span>
         <h3>Become a supporter</h3>
-        <p>Give monthly or once. It keeps releases coming and pays for testing on real shows.</p>
+        <p>Write to us to give monthly or once. It keeps releases coming and pays for testing on real shows.</p>
         <!-- PLACEHOLDER: supporter / donation page link (GitHub Sponsors, Open Collective, Ko-fi or Paystack); until then it mails hello@ via contacts.json -->
         <a class="btn btn-block" href="#support" data-contact="hello" data-contact-subject="Supporting Clear to Air">Become a supporter</a>
       </div>
@@ -511,9 +516,9 @@
         <a class="btn btn-block" href="#support" data-contact="hello" data-contact-subject="Sponsoring Clear to Air">Talk to us about sponsoring</a>
       </div>
       <div class="support-card reveal" data-delay="2">
-        <span class="tag">Coming</span>
+        <span class="tag">Beta</span>
         <h3>Hosted control room</h3>
-        <p>Hand the desk to a producer or scorer on a laptop anywhere. Our hosted relay is live at <b>room.cleartoair.com</b>, free while it is in beta: paste it into Setup &rarr; Remote seats. Running the relay yourself is free too.</p>
+        <p>Hand the desk to a producer or scorer on a laptop anywhere. Our hosted relay is live at <b>room.cleartoair.com</b>, free while it is in beta: paste it into Setup &rarr; Remote seats. Tested over the internet, not yet on a real show. Running the relay yourself is free too.</p>
         <a class="btn btn-block" href="#open-source" data-repo-path="/tree/main/relay" data-repo-soon="Relay source at public launch">Run the relay yourself</a>
       </div>
       <div class="support-card reveal" data-delay="3">
@@ -540,7 +545,7 @@
       </details>
       <details>
         <summary>How finished is it?</summary>
-        <p>It is early. It has been tested against the built-in simulators and on one real OBS setup, and testing with real games is in progress. Rehearse a full show with it before you put it on air.</p>
+        <p>It is early. It has been tested with the built-in simulators, sample data shaped from each game's documentation, and one real OBS setup. No adapter has run against a live game yet and it has not carried a real show; the first real-game tests are planned. Remote seats have been tested over the internet, not yet on a show. Rehearse a full show with it before you put it on air.</p>
       </details>
       <details>
         <summary>Does it replace OBS?</summary>
@@ -552,7 +557,7 @@
       </details>
       <details>
         <summary>Which games have live data?</summary>
-        <p>CS2, Dota 2, Rocket League, League of Legends and Apex (in private matches), each through the publisher's own feed. VALORANT, fighting games and EA FC are run from a manual desk, with team and bracket import from start.gg. For VALORANT you can also paste the end-of-game scoreboard text to fill in player stats.</p>
+        <p>CS2, Dota 2, Rocket League, League of Legends and Apex (in private matches), each through an adapter for the publisher's own feed, so far tested with simulators and sample data only. VALORANT, fighting games and EA FC are run from a manual desk, with team and bracket import from start.gg. For VALORANT you can also paste the end-of-game scoreboard text to fill in player stats.</p>
       </details>
       <details>
         <summary>Can I bring my own design?</summary>
@@ -560,7 +565,7 @@
       </details>
       <details>
         <summary>Is it allowed by the publishers?</summary>
-        <p>Game State Integration is an official Valve feature for CS2 and Dota 2. Rocket League's Stats API is part of the game, and the Apex LiveAPI is Respawn's own. Riot's policy allows broadcast overlays in OBS and bans overlays that give players a real-time advantage in game; Clear to Air only makes the first kind. Nothing here reads game memory or injects into a game client.</p>
+        <p>Game State Integration is an official Valve feature for CS2 and Dota 2. Rocket League's Stats API is part of the game, and the Apex LiveAPI is Respawn's own. Riot's policy allows broadcast overlays in OBS and bans overlays that give players a real-time advantage in game; Clear to Air only makes the first kind. Clear to Air does not read game memory or inject into a game client. Its optional Rocket League fallback, SOS, needs the BakkesMod mod, which only loads with anti-cheat off.</p>
       </details>
     </div>
     <p class="faq-more">Something else? <a href="#open-source" data-repo-path="/discussions" data-repo-soon="Ask in Discussions (opens at public launch)">Ask in GitHub Discussions</a>.</p>
@@ -571,9 +576,9 @@
 <section class="section ea" id="notify" aria-labelledby="ea-h">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="label eyebrow">Public launch</span>
+      <span class="label eyebrow">Version 1.0</span>
       <h2 id="ea-h">Get notified.</h2>
-      <p>The public release is not out yet. Leave an address and we will email you once, when it is.</p>
+      <p>Releases are on GitHub now. Leave an address and we will email you once, when version 1.0 is out.</p>
     </div>
     <form class="reveal" id="ea-form" novalidate>
       <label class="skip" for="ea-email" style="position:absolute;left:-9999px;top:auto">Email address</label>
@@ -582,7 +587,7 @@
       <button class="btn btn-lg" type="submit">Get notified</button>
     </form>
     <p class="ea-msg" id="ea-msg" role="status" aria-live="polite" hidden></p>
-    <p class="ea-small reveal">One email at launch. No newsletter.</p>
+    <p class="ea-small reveal">One email, at 1.0. No newsletter.</p>
   </div>
 </section>
 

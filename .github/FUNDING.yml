@@ -1,15 +1,19 @@
-# Funding links shown in the "Sponsor" button on GitHub.
-# Every entry is commented out until the accounts exist. Uncomment and fill in.
+# Funding links for GitHub's "Sponsor" button on github.com/downstagehq/cleartoair.
+# Every entry stays commented out until its account exists and has been checked.
+# Uncomment one line at a time, replacing the <PLACEHOLDER>. GitHub shows the button
+# as soon as one entry is live.
 # Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# NB: the organisation is downstagehq. github.com/downstage is someone else's.
 
-# PLACEHOLDER: GitHub Sponsors account (organisation or user name)
-# github: [downstage]
+# GitHub Sponsors for the downstagehq organisation (needs an approved Sponsors profile + payout bank account)
+# github: [downstagehq]
 
-# PLACEHOLDER: Open Collective slug
-# open_collective: cleartoair
+# Open Collective collective slug (the public ledger supporters and sponsors can see)
+# open_collective: <OPEN_COLLECTIVE_SLUG>
 
-# PLACEHOLDER: Ko-fi user name
-# ko_fi: downstage
+# Ko-fi page for one-off and monthly support
+# ko_fi: <KOFI_HANDLE>
 
-# PLACEHOLDER: Paystack payment page for supporters paying in rands
-# custom: ["https://paystack.com/pay/<page>"]
+# Supporters paying in rand: a Paystack payment page (Downstage's Paystack account)
+# custom: ["https://paystack.com/pay/<PAYSTACK_PAGE_SLUG>"]

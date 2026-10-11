@@ -16,6 +16,7 @@ import { createPreflight } from './preflight.js';
 import { createRehearsal } from './rehearse.js';
 import { createWatchdog } from './watchdog.js';
 import { createRemote } from './remote.js';
+import { currentVersion } from './update.js';
 
 function loadPacks() {
   const map = new Map();
@@ -63,7 +64,7 @@ async function main() {
   ctx.remote = createRemote(ctx);
   const obsAction = createObsAction(ctx);
   hub = createHub(server, {
-    hello: () => ({ state: state.get(), obs: bridge.status(), adapters: registry.snapshot(), preflight: preflight.last() }),
+    hello: () => ({ version: currentVersion(), state: state.get(), obs: bridge.status(), adapters: registry.snapshot(), preflight: preflight.last() }),
     patch: (data) => state.patch(data),
     obs: (action, body) => obsAction(action, body),
     onClients: () => { /* preflight picks the count up on its next tick */ },

@@ -477,6 +477,14 @@ export function createBridge({ getSettings = () => ({}), onStatus = () => {}, ov
     }
   }
 
+  /** One input as OBS renders it (no scene, no graphics on top): the game feed for OCR. PNG. */
+  async function sourceScreenshot(sourceName, width = 1920) {
+    if (!status.connected) throw Object.assign(new Error('OBS is not connected'), { status: 503 });
+    const w = Math.max(8, Math.min(4096, Number(width) || 1920));
+    const r = await call('GetSourceScreenshot', { sourceName, imageFormat: 'png', imageWidth: w, imageCompressionQuality: -1 });
+    return Buffer.from(String(r.imageData || '').replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
+  }
+
   // A browser source that loaded while the agent was down shows a blank page
   // forever - OBS never retries - so this runs on every ready and on demand.
   async function refreshBrowserSource(name) {
@@ -519,7 +527,7 @@ export function createBridge({ getSettings = () => ({}), onStatus = () => {}, ov
 
   return {
     connect, stop, status: () => status, refresh: async () => { await refresh(); emit(); return { ok: true }; },
-    setScene, setPreview, take, setItem, replay, stream, record, mute, screenshot,
+    setScene, setPreview, take, setItem, replay, stream, record, mute, screenshot, sourceScreenshot,
     refreshBrowserSources, refreshBrowserSource, raw, on: (ev, fn) => obs.on(ev, fn),
     getSceneItems, getVisibleItems, getInputSettings, listInputs, resolveScene, call, refreshTalentMute,
   };

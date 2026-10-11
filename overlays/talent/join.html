@@ -165,12 +165,17 @@
     const signalingHost = window.location.host || '127.0.0.1:7700';
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
+    const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+    const RETRY_MS = 2000;
+
     let localStream = null;
     let pc = null;
     let ws = null;
     let audioContext = null;
     let analyser = null;
     let isLive = false;
+    let seq = 0;            // numbers our peer connections; the hub and view.html echo it back
+    let retryTimer = null;
 
     async function getDevices() {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -207,6 +212,15 @@
 
       document.getElementById('local-preview').srcObject = localStream;
       setupAudioMeter(localStream);
+
+      // Switching camera or mic mid-show: the old tracks were just stopped, so
+      // hand the live call the new ones instead of leaving it sending nothing.
+      if (pc) {
+        for (const sender of pc.getSenders()) {
+          const next = sender.track && localStream.getTracks().find((t) => t.kind === sender.track.kind);
+          if (next) sender.replaceTrack(next).catch((e) => console.warn('[TALENT] replaceTrack', e));
+        }
+      }
     }
 
     function setupAudioMeter(stream) {
@@ -240,56 +254,127 @@
       }
     }
 
+    function setBadge(text, cls) {
+      const b = document.getElementById('status-badge');
+      b.textContent = text;
+      b.className = cls;
+    }
+
+    function setButton(live) {
+      const btn = document.getElementById('btn-toggle-live');
+      btn.textContent = live ? 'DISCONNECT STREAM' : 'CONNECT TO OBS';
+      btn.className = live ? 'btn-action btn-live active' : 'btn-action btn-live';
+    }
+
     function connect() {
-      ws = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=caster&slot=${slot}`);
+      if (!localStream) return;
+      isLive = true;
+      setButton(true);
+      setBadge('CONNECTING…', 'badge');
+      openSignaling(true);
+    }
 
-      ws.onopen = async () => {
-        document.getElementById('status-badge').textContent = 'CONNECTED · LIVE';
-        document.getElementById('status-badge').className = 'badge connected';
-        document.getElementById('btn-toggle-live').textContent = 'DISCONNECT STREAM';
-        document.getElementById('btn-toggle-live').className = 'btn-action btn-live active';
-        isLive = true;
+    function wsSend(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    }
 
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    // A fresh peer connection and offer. Closes the previous one: an offer can
+    // be answered once, so every new receiver (OBS refreshed or restarted the
+    // source) needs a new connection.
+    async function startPeer() {
+      if (!localStream || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const my = ++seq;
+      if (pc) { pc.onicecandidate = null; pc.close(); }
+      const p = pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      localStream.getTracks().forEach((track) => p.addTrack(track, localStream));
 
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-        pc.onicecandidate = (e) => {
-          if (e.candidate && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'candidate', candidate: e.candidate }));
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        ws.send(JSON.stringify({ type: 'offer', offer }));
+      // Hold candidates until the offer is out, so none can reach the hub
+      // (or a receiver) ahead of the offer they belong to.
+      let offerSent = false;
+      const early = [];
+      p.onicecandidate = (e) => {
+        if (!e.candidate || pc !== p) return;
+        const msg = { type: 'candidate', candidate: e.candidate, seq: my };
+        if (offerSent) wsSend(msg); else early.push(msg);
       };
 
-      ws.onmessage = async (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'answer' && pc) {
-          await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
-        } else if (msg.type === 'candidate' && pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      try {
+        const offer = await p.createOffer();
+        if (pc !== p) return;   // superseded while we waited
+        await p.setLocalDescription(offer);
+        if (pc !== p) return;
+        wsSend({ type: 'offer', offer: p.localDescription, seq: my });
+        offerSent = true;
+        early.forEach(wsSend);
+      } catch (e) {
+        console.warn('[TALENT] offer failed', e);
+      }
+    }
+
+    // fresh: the CONNECT button. Otherwise a reconnect after the signaling
+    // socket dropped (agent restart, network blip): media goes peer to peer and
+    // does not need the agent, so a call that is still connected is kept as it
+    // is; only a dead one is renegotiated.
+    function openSignaling(fresh) {
+      clearTimeout(retryTimer);
+      const sock = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=caster&slot=${encodeURIComponent(slot)}`);
+      ws = sock;
+
+      sock.onopen = () => {
+        if (ws !== sock) return;
+        setBadge('CONNECTED · LIVE', 'badge connected');
+        if (fresh || !pc || pc.connectionState !== 'connected') startPeer();
+      };
+
+      sock.onmessage = async (e) => {
+        if (ws !== sock) return;
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        const current = msg.seq == null || msg.seq === seq;
+        try {
+          if (msg.type === 'RENEGOTIATE') {
+            await startPeer();
+          } else if (msg.type === 'answer' && pc && current) {
+            if (pc.signalingState === 'have-local-offer') await pc.setRemoteDescription(msg.answer);
+          } else if (msg.type === 'candidate' && pc && current) {
+            await pc.addIceCandidate(msg.candidate);
+          }
+        } catch (err) {
+          console.warn(`[TALENT] ${msg.type}`, err);
         }
       };
 
-      ws.onclose = () => {
-        disconnect();
+      sock.onclose = (e) => {
+        if (ws !== sock) return;
+        ws = null;
+        if (!isLive) return;
+        if (e.reason === 'replaced') {
+          // This slot was opened on another device or tab; that one is live now.
+          disconnect();
+          setBadge('OPENED ELSEWHERE', 'badge');
+          return;
+        }
+        setBadge('RECONNECTING…', 'badge');
+        retryTimer = setTimeout(() => { if (isLive) openSignaling(false); }, RETRY_MS);
       };
     }
 
     function disconnect() {
-      if (pc) pc.close();
-      if (ws) ws.close();
-      pc = null;
-      ws = null;
       isLive = false;
-      document.getElementById('status-badge').textContent = 'OFFLINE';
-      document.getElementById('status-badge').className = 'badge';
-      document.getElementById('btn-toggle-live').textContent = 'CONNECT TO OBS';
-      document.getElementById('btn-toggle-live').className = 'btn-action btn-live';
+      clearTimeout(retryTimer);
+      wsSend({ type: 'bye' });   // tells the OBS side this was on purpose
+      const sock = ws;
+      ws = null;
+      if (pc) { pc.onicecandidate = null; pc.close(); }
+      if (sock) sock.close(1000, 'bye');
+      pc = null;
+      setBadge('OFFLINE', 'badge');
+      setButton(false);
     }
+
+    // Closing or reloading the tab is leaving on purpose too: say so, so the OBS
+    // side clears at once instead of holding a frozen frame until ICE times out.
+    window.addEventListener('pagehide', () => { if (isLive) wsSend({ type: 'bye' }); });
 
     window.onload = async () => {
       await getDevices();

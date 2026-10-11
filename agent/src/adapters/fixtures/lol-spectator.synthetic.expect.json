@@ -1,0 +1,31 @@
+{
+  "adapter": "lolclient",
+  "payloads": 9,
+  "final": {
+    "phase": "live",
+    "mapName": "Summoner's Rift",
+    "scoreA": 1,
+    "scoreB": 1,
+    "sideA": "BLUE",
+    "sideB": "RED",
+    "names.A": "Blue",
+    "names.B": "Red",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0
+  },
+  "events": [
+    "match_start",
+    "info",
+    "first_blood",
+    "kill",
+    "dragon",
+    "turret",
+    "herald",
+    "baron",
+    "inhib"
+  ],
+  "problems": 0,
+  "why": "Spectator allgamedata: events de-duplicated across polls, kills read from events and scores."
+}

@@ -439,6 +439,53 @@ for (const name of ADAPTERS) {
   }
 }
 
+// ---- replay fixtures (fixtures/*.jsonl, the "Record raw game data" format) ------------------
+// Every capture in fixtures/ is replayed through the adapter's own parser and checked against
+// its .expect.json. A real capture dropped in with an expectation joins this run by itself.
+{
+  console.log('\n== replay fixtures ==');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { parseCapture, replayCapture, check } = await import('../replay.js');
+  const { createCaptures } = await import('../capture.js');
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort() : [];
+  let real = 0;
+  for (const f of files) {
+    const cap = parseCapture(fs.readFileSync(path.join(dir, f), 'utf8'));
+    if (!cap.header?.synthetic) real++;
+    const expFile = path.join(dir, f.replace(/\.jsonl$/, '.expect.json'));
+    ok(cap.errors.length === 0, `${f}: parses (${cap.payloads.length} payloads${cap.header?.synthetic ? ', synthetic' : ', REAL capture'})`);
+    if (!fs.existsSync(expFile)) { ok(false, `${f}: has no .expect.json (node tools/replay.mjs ${f} --expect, then review it)`); continue; }
+    let run;
+    try { run = replayCapture(cap); } catch (e) { ok(false, `${f}: replay threw ${e.message}`); continue; }
+    const res = check(run, JSON.parse(fs.readFileSync(expFile, 'utf8')));
+    const bad = res.filter((r) => !r.ok);
+    ok(bad.length === 0, `${f}: ${res.length - bad.length}/${res.length} expectations${bad.length ? ` - ${bad.map((r) => r.what).join('; ')}` : ''}`);
+  }
+  ok(files.length >= 6, `${files.length} fixture(s), ${real} from a real game`);
+
+  // The recorder and the replayer agree on the file format: write with createCaptures, read back.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cta-replay-'));
+  try {
+    const caps = createCaptures({ dir: tmp, version: 'test', getState: () => ({ settings: { gsiToken: 'tok-secret-1' } }) });
+    caps.start('cs2gsi', 'cs2');
+    caps.write('cs2gsi', { ...CS2_PAYLOAD, auth: { token: 'tok-secret-1' } });
+    caps.write('cs2gsi', { ...CS2_PAYLOAD, map: { ...CS2_PAYLOAD.map, team_ct: { ...CS2_PAYLOAD.map.team_ct, score: 8 } }, auth: { token: 'tok-secret-1' } });
+    const file = caps.status('cs2gsi').file;
+    caps.stop('cs2gsi'); await caps.flushed();
+    const text = fs.readFileSync(file, 'utf8');
+    const back = parseCapture(text);
+    const run = replayCapture(back, { state });
+    ok(back.header?.adapter === 'cs2gsi' && back.payloads.length === 2 && !text.includes('tok-secret-1') && run.final.scoreA === 8 && run.final.mapName === 'Mirage',
+      `a file written by the recorder replays (${back.payloads.length} payloads, token stripped, final ${run.final?.scoreA}-${run.final?.scoreB})`);
+    const torn = parseCapture(`${text}{"type":"payload","t":"x","adapter":"cs2gsi","payl`);
+    ok(torn.payloads.length === 2 && torn.errors.length === 1, 'a file cut off mid-line (the PC lost power) still replays up to the torn line');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
 // ---- simulators ------------------------------------------------------------------------------
 for (const name of SIMS) {
   console.log(`\n== sim ${name} ==`);

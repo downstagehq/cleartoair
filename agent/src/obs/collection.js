@@ -92,14 +92,16 @@ const COMMON = {
 function exists(p) { try { return fs.existsSync(p); } catch { return false; } }
 function fwd(p) { return String(p).replace(/\\/g, '/'); }
 
-export function build({ state, pack, root, vdo } = {}) {
+export function build({ state, pack, root, vdo, port = PORTS.agent } = {}) {
   const [CANVAS_W, CANVAS_H] = (state.settings && state.settings.canvas) || [1920, 1080];
   const HALF = CANVAS_H / 2;
   const game = state.game || (pack && pack.id) || 'valorant';
   pack = pack || { id: game, name: game, overlay: { pages: ['ingame.html', 'cards.html', 'standby.html', 'desk.html'] }, theme: {} };
   const packDir = path.join(root ? path.join(root, 'packs') : PACKS_DIR, game);
   const mediaDir = path.join(packDir, 'assets', 'media');
-  const web = `http://127.0.0.1:${PORTS.agent}`;
+  // The port this agent really listens on (--port / CTA_PORT), not the default: a collection built
+  // by an agent on :7720 that points at :7700 shows another agent's graphics, or none.
+  const web = `http://127.0.0.1:${port}`;
   // Title-agnostic pages: /overlay/<page>.html follows state.game by itself, so one
   // collection serves every title and a switch in Setup reaches OBS without a
   // reinstall (see obs/sync.js).
@@ -250,7 +252,7 @@ export function build({ state, pack, root, vdo } = {}) {
   // cannot diverge, because there is nothing to diverge from.
   const talentMode = (state.settings && state.settings.talent && state.settings.talent.mode) || 'vdo';
   const studio = talentMode === 'studio';
-  const studioUrl = (slot) => `http://127.0.0.1:${PORTS.agent}/overlays/talent/view.html?slot=caster${slot}`;
+  const studioUrl = (slot) => `${web}/overlays/talent/view.html?slot=caster${slot}`;
 
   const talent = [...(state.talent || [])].filter((t) => t && t.slot != null).sort((a, b) => a.slot - b.slot);
   const cams = new Map(), auds = new Map();

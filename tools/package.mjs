@@ -97,7 +97,12 @@ fs.copyFileSync(exe, path.join(STAGE, 'Clear to Air.exe'));
 const APP = path.join(STAGE, 'app');
 fs.mkdirSync(APP, { recursive: true });
 fs.writeFileSync(path.join(APP, 'package.json'), JSON.stringify({ name: pkg.name, version: VERSION, private: true, type: 'module', description: pkg.description }, null, 2));
-copyDir(path.join(ROOT, 'agent'), path.join(APP, 'agent'), (p) => /[\\/]agent[\\/]data([\\/]|$)/.test(p) || /_selftest\.js$/.test(p) || /README\.md$/.test(p) || /package-lock\.json$/.test(p));
+// Test fixtures (replay captures, OCR boards) and test runners stay in the repo.
+copyDir(path.join(ROOT, 'agent'), path.join(APP, 'agent'), (p) => /[\\/]agent[\\/]data([\\/]|$)/.test(p) || /_selftest\.js$/.test(p) || /_ocrtest\.js$/.test(p) || /[\\/]src[\\/](adapters|stats)[\\/]fixtures([\\/]|$)/.test(p) || /README\.md$/.test(p) || /package-lock\.json$/.test(p));
+// Replay a "Record raw game data" file into the running agent (rehearse on real data).
+// tools/replay.mjs resolves ../agent from wherever it sits, so app/tools/ works as-is.
+fs.mkdirSync(path.join(APP, 'tools'), { recursive: true });
+fs.copyFileSync(path.join(ROOT, 'tools', 'replay.mjs'), path.join(APP, 'tools', 'replay.mjs'));
 // A shipped install carries no event's brand assets or player portraits by
 // default - only what that event's own operator fills in.
 copyDir(path.join(ROOT, 'packs'), path.join(APP, 'packs'), (p) => /[\\/]assets[\\/](teams|brand|portraits)([\\/]|$)/.test(p) || /[\\/]packs[\\/]_players([\\/]|$)/.test(p));
@@ -113,6 +118,21 @@ fs.copyFileSync(path.join(ROOT, 'relay', 'src', 'protocol.js'), path.join(APP, '
 for (const f of ['LICENSE', 'TRADEMARKS.md', 'THIRD_PARTY_NOTICES.md']) fs.copyFileSync(path.join(ROOT, f), path.join(STAGE, f));
 fs.copyFileSync(path.join(ROOT, 'licenses', 'node-LICENSE.txt'), path.join(STAGE, 'runtime', 'LICENSE.txt'));
 fs.writeFileSync(path.join(STAGE, 'VERSION'), VERSION + '\n');
+// Drag a capture (app\agent\data\captures\*.jsonl) onto this file: it plays into the running
+// agent through the game's own port. No brackets inside echo lines (cmd closes the block).
+fs.writeFileSync(path.join(STAGE, 'Replay a recording.cmd'), [
+  '@echo off',
+  'setlocal',
+  'if "%~1"=="" goto usage',
+  'echo Playing %~nx1 into Clear to Air - start the game adapter in the Data tab first. Ctrl+C stops.',
+  '"%~dp0runtime\\node.exe" "%~dp0app\\tools\\replay.mjs" "%~1" --live --speed 1',
+  'pause',
+  'goto :eof',
+  ':usage',
+  'echo Drag a recording - a .jsonl file from app\\agent\\data\\captures - onto this file.',
+  'pause',
+  '',
+].join('\r\n'));
 fs.writeFileSync(path.join(STAGE, 'README.txt'), [
   `Clear to Air ${VERSION} - portable`,
   '',
@@ -120,6 +140,8 @@ fs.writeFileSync(path.join(STAGE, 'README.txt'), [
   '2. Double-click "Clear to Air.exe". The lamp appears in the tray and the control room opens at http://127.0.0.1:7700/.',
   '3. In OBS: Tools > WebSocket Server Settings > Enable. The agent reads the password from OBS itself.',
   '4. Setup > OBS collection > Hold to install (OBS closed), reopen OBS, pick the ClearToAir collection.',
+  '',
+  'Rehearse on real data: drag a recording (app\\agent\\data\\captures\\*.jsonl, made with Record raw game data) onto "Replay a recording.cmd".',
   '',
   'Updates: tray icon > Check for updates. Your state (app\\agent\\data) and cached team logos survive an update.',
   'Uninstall: quit from the tray icon and delete the folder. Nothing is written outside it except the OBS collection you installed.',

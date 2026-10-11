@@ -1,0 +1,28 @@
+{
+  "adapter": "dota2gsi",
+  "payloads": 17,
+  "final": {
+    "phase": "gameover",
+    "mapName": "Dota 2",
+    "scoreA": 26,
+    "scoreB": 10,
+    "sideA": "RADIANT",
+    "sideB": "DIRE",
+    "names.A": "Alpha",
+    "names.B": "Bravo",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0
+  },
+  "events": [
+    "draft",
+    "kill",
+    "match_start",
+    "roshan",
+    "info",
+    "match_end"
+  ],
+  "problems": 0,
+  "why": "Draft to post-game; org names from the league block, Radiant win, Aegis pickup surfaced once."
+}

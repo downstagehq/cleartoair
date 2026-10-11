@@ -1,0 +1,29 @@
+{
+  "adapter": "rlstats",
+  "payloads": 43,
+  "final": {
+    "phase": "podium",
+    "mapName": "Stadium_P",
+    "scoreA": 2,
+    "scoreB": 1,
+    "sideA": "BLUE",
+    "sideB": "ORANGE",
+    "names.A": "Alpha",
+    "names.B": "Bravo",
+    "players.length": 6,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0,
+    "extra.winner": "BLUE",
+    "extra.lastGoal.scorer": "Onyx",
+    "extra.lastGoal.speed": 112
+  },
+  "events": [
+    "match_start",
+    "goal",
+    "info",
+    "match_end"
+  ],
+  "problems": 0,
+  "why": "Goal, replay, pause and kickoff phases from the native Stats API; Data arrives as a JSON string."
+}

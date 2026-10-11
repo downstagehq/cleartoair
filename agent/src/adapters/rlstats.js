@@ -140,7 +140,14 @@ export function applyMessage(m, msg) {
       m.clockSeconds = numOr(pick(g, 'TimeSeconds', 'time_seconds', 'time'), m.clockSeconds);
       m.overtime = !!pick(g, 'bOvertime', 'isOT', 'IsOT', 'overtime');
       m.hasWinner = !!pick(g, 'bHasWinner', 'hasWinner', 'HasWinner');
-      m.winner = pick(g, 'Winner', 'winner') ?? m.winner;
+      // Game.Winner is the winning team's NAME (or '' until there is one), MatchEnded's WinnerTeamNum a
+      // number: keep one form, the side key, and never let an empty Winner wipe the one MatchEnded set.
+      const wn = pick(g, 'Winner', 'winner');
+      if (wn != null && wn !== '') {
+        const byName = (Array.isArray(g.Teams ?? g.teams) ? (g.Teams ?? g.teams) : []).find((t) => String(pick(t, 'Name', 'name') ?? '').toLowerCase() === String(wn).toLowerCase());
+        const tn = byName ? pick(byName, 'TeamNum', 'team_num') : wn;
+        m.winner = TEAM_KEY[tn] ?? String(wn);
+      }
       const replayFlag = pick(g, 'bReplay', 'isReplay', 'IsReplay');
       if (replayFlag) m.phase = 'replay';
       else if (m.hasWinner) m.phase = m.phase === 'podium' ? 'podium' : 'gameover';

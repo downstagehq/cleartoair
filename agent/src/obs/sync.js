@@ -24,6 +24,23 @@ export function genericUrl(url) {
   return m ? `${m[1]}/overlay/${m[3]}${m[4] || ''}` : null;
 }
 
+/** A page this agent serves to OBS, on loopback, whatever port the URL names. */
+const LOCAL_PAGE = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(\/(?:overlay|overlays|packs)\/.*)$/i;
+
+/**
+ * Where a browser source should point: the generic page (genericUrl) at THIS agent's
+ * origin. A collection installed by an agent on another port (--port / CTA_PORT, or a
+ * second rig profile) shows that agent's graphics, or nothing. null = already right,
+ * or not ours (VDO.Ninja and any other site are never touched).
+ */
+export function repointUrl(url, origin) {
+  const cur = String(url || '');
+  let to = genericUrl(cur) || cur;
+  const m = origin ? LOCAL_PAGE.exec(to) : null;
+  if (m) to = `${origin.replace(/\/+$/, '')}${m[1]}`;
+  return to === cur ? null : to;
+}
+
 /** OBS input kinds that count as "the game feed" for our purposes. */
 const CAPTURE_KINDS = new Set(['game_capture', 'window_capture', 'monitor_capture', 'dshow_input', 'decklink-input', 'ndi_source']);
 
@@ -82,7 +99,7 @@ export async function placeCaptureBelowGraphics({ bridge, scene, log }) {
 /**
  * @returns {{ ok: true, changes: Array<{kind: string, input?: string, detail?: string}> }}
  */
-export async function syncGame({ bridge, state, pack, log }) {
+export async function syncGame({ bridge, state, pack, log, origin = null }) {
   const s = bridge.status();
   if (!s.connected) throw Object.assign(new Error('OBS is not connected'), { status: 503 });
   if (!s.ready) throw Object.assign(new Error('OBS is still loading its scene collection'), { status: 503 });
@@ -90,13 +107,13 @@ export async function syncGame({ bridge, state, pack, log }) {
   const changes = [];
   const errors = [];
 
-  // 1. Overlay browser sources: /packs/<x>/overlay/<page>.html -> /overlay/<page>.html.
-  //    The page then follows state.game on its own. OBS reloads a browser source
-  //    when its URL setting changes, so no separate refresh is needed.
+  // 1. Overlay browser sources: /packs/<x>/overlay/<page>.html -> /overlay/<page>.html,
+  //    at this agent's origin. The page then follows state.game on its own. OBS reloads
+  //    a browser source when its URL setting changes, so no separate refresh is needed.
   for (const i of await bridge.listInputs('browser_source')) {
     let settings;
     try { settings = await bridge.getInputSettings(i.name); } catch { continue; }
-    const to = genericUrl(settings.url);
+    const to = repointUrl(settings.url, origin);
     if (!to) continue;
     await bridge.call('SetInputSettings', { inputName: i.name, inputSettings: { url: to }, overlay: true });
     changes.push({ kind: 'url', input: i.name, detail: `${settings.url} -> ${to}` });
@@ -168,4 +185,4 @@ export async function syncGame({ bridge, state, pack, log }) {
   return { ok: true, game, changes };
 }
 
-export default { syncGame, genericUrl, captureOrderProblems, captureTargetIndex, placeCaptureBelowGraphics };
+export default { syncGame, genericUrl, repointUrl, captureOrderProblems, captureTargetIndex, placeCaptureBelowGraphics };

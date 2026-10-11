@@ -217,13 +217,23 @@
    * correction meant it. This is the fallback, so a live match fills the card
    * instead of leaving NO ROWS on screen for every title that has a real feed.
    * Live players carry team 'A'/'B'; the card filters by team id, so map them. */
+  function finalResult(s) {
+    var r = s && s.live && s.live.result;
+    return r && r.game === s.game && Array.isArray(r.players) && r.players.length ? r : null;
+  }
+
   function liveScoreboardRows(s, cols) {
     var lv = (s && s.live) || {};
-    if (!lv.connected || !Array.isArray(lv.players) || !lv.players.length) return [];
+    var players = lv.connected && Array.isArray(lv.players) && lv.players.length ? lv.players : null;
+    // The feed dropped or the lobby closed after the final whistle: the last finished game of
+    // THIS title (live.result, kept by the agent) is what a post-match scoreboard should show.
+    var res = finalResult(s);
+    if (!players && res) players = res.players;
+    if (!players) return [];
     var se = (s && s.series) || {};
     var idFor = { A: se.teamA, B: se.teamB };
     var out = [];
-    lv.players.forEach(function (p) {
+    players.forEach(function (p) {
       var id = idFor[p.team];
       if (!id) return;                                  // cannot place this player on a desk team
       var row = { team: id, ign: p.name || '' };
@@ -811,6 +821,12 @@
       var pasted = (sb.rows && sb.rows.length) ? sb.rows : null;
       var all = pasted || liveScoreboardRows(s, cols);
       var map = (se.maps || [])[n0(pasted && sb.mapIndex != null ? sb.mapIndex : se.mapIndex)] || {};
+      var scA = map.scoreA, scB = map.scoreB;
+      if (!pasted && scA == null && scB == null) {
+        // Nobody has scored this game on the Match tab yet: the rows came from the feed, so does the score.
+        var lvs = s.live && s.live.connected && s.live.players && s.live.players.length ? s.live : finalResult(s);
+        if (lvs) { scA = lvs.scoreA; scB = lvs.scoreB; }
+      }
       var side = function (t, id, sc, i) {
         var rows = all.filter(function (r) { return r.team === id; });
         var best = rows.reduce(function (m, r) { return n0(r[mvpStat]) > n0(m) ? r[mvpStat] : m; }, null);
@@ -819,7 +835,7 @@
           rows.map(function (r) { return '<tr><td>' + esc(r.ign || '') + '</td>' + cols.map(function (c) { return '<td class="' + (c === mvpStat && best != null && r[c] === best ? 'hi' : '') + '">' + esc(r[c] != null ? r[c] : '–') + '</td>'; }).join('') + '</tr>'; }).join('') +
           (rows.length ? '' : '<tr><td colspan="' + (cols.length + 1) + '" class="t-label">NO ROWS</td></tr>') + '</tbody></table></div>';
       };
-      return '<div class="fx-stagger"><div class="scoreboard">' + side(A, se.teamA, map.scoreA, 0) + side(B, se.teamB, map.scoreB, 1) + '</div></div>';
+      return '<div class="fx-stagger"><div class="scoreboard">' + side(A, se.teamA, scA, 0) + side(B, se.teamB, scB, 1) + '</div></div>';
     },
 
     mvp: function (s) {

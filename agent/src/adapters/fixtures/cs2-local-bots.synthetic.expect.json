@@ -1,0 +1,46 @@
+{
+  "adapter": "cs2gsi",
+  "payloads": 72,
+  "final": {
+    "phase": "gameover",
+    "mapName": "Mirage",
+    "scoreA": 13,
+    "scoreB": 9,
+    "sideA": "T",
+    "sideB": "CT",
+    "names.A": "T",
+    "names.B": "CT",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 22
+  },
+  "events": [
+    "match_start",
+    "round_end",
+    "bomb_planted",
+    "kill",
+    "match_end"
+  ],
+  "problems": 0,
+  "why": "Halftime swaps sides, not teams: A keeps the players it started with (no mp_teamname, so only the players say who is who). The round number comes from the two scores (22 rounds played), not map.round, whose timing is unconfirmed on a real server.",
+  "frames": {
+    "39": {
+      "scoreA": 8,
+      "scoreB": 4,
+      "sideA": "CT",
+      "phase": "over"
+    },
+    "40": {
+      "phase": "halftime",
+      "scoreA": 8,
+      "scoreB": 4
+    },
+    "41": {
+      "sideA": "T",
+      "scoreA": 8,
+      "scoreB": 4,
+      "phase": "freezetime"
+    }
+  }
+}

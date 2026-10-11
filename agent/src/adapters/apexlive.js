@@ -24,7 +24,7 @@ const STATE_PHASE = { WaitingForPlayers: 'warmup', PickLoadout: 'warmup', Premat
 const STATE_KEY = Object.fromEntries(Object.entries(STATE_PHASE).map(([k, v]) => [k.toLowerCase(), v]));
 
 export function createMatchModel() {
-  return { squads: new Map(), players: new Map(), phase: 'unknown', ring: null, map: '', observer: '', matchStart: 0, events: [], winners: [], version: '', matchId: '' };
+  return { squads: new Map(), players: new Map(), phase: 'unknown', ring: null, map: '', observer: '', matchStart: 0, events: [], winners: [], version: '', matchId: '', lastT: 0 };
 }
 
 /** 'player_killed' | 'playerKilled' | 'PlayerKilled' | 'type.googleapis.com/rtech.liveapi.PlayerKilled' -> 'playerkilled'. */
@@ -33,7 +33,7 @@ export function eventKey(ev) {
   return String(raw).replace(/[^a-z]/gi, '').toLowerCase();
 }
 
-function clearMatch(m) { m.squads.clear(); m.players.clear(); m.winners = []; m.ring = null; m.observer = ''; m.matchStart = 0; }
+function clearMatch(m) { m.squads.clear(); m.players.clear(); m.winners = []; m.ring = null; m.observer = ''; m.matchStart = 0; m.lastT = 0; }
 
 function who(p) {
   if (!p || typeof p !== 'object') return null;
@@ -63,6 +63,9 @@ export function applyEvent(m, msg) {
   const ev = msg?.gameMessage || msg;
   if (!ev || typeof ev !== 'object') return m;
   const t = Number(ev.timestamp || 0) * 1000 || Date.now();
+  // The match clock runs on the game's own timestamps, never this PC's clock: a skewed PC clock or a
+  // replayed capture (tools/replay.mjs) would otherwise read days. Events without one do not move it.
+  if (Number(ev.timestamp) > 0 && t > m.lastT) m.lastT = t;
   switch (eventKey(ev)) {
     // init arrives on every (re)connect — it must NOT wipe the match; only a new matchSetup does.
     case 'init': m.version = ev.gameVersion || ''; if (m.phase === 'unknown') m.phase = 'warmup'; pushEvent(m.events, 'info', `LiveAPI connected (${ev.gameVersion || 'game'})`, t); break;
@@ -107,7 +110,7 @@ export function modelToRaw(m) {
     .sort((a, b) => (b.alive - a.alive) || (a.placement ?? 99) - (b.placement ?? 99) || b.kills - a.kills);
   const players = [...m.players.values()].map(p => ({ team: p.team, name: p.name, hp: p.hp, alive: p.alive, kills: p.kills, champion: p.character, score: p.damage, extra: { damage: p.damage, downs: p.downs, teamId: p.teamId } }));
   const aliveSquads = squads.filter(s => s.alive).length;
-  const elapsed = m.matchStart ? Math.floor((Date.now() - m.matchStart) / 1000) : 0;
+  const elapsed = m.matchStart && m.lastT >= m.matchStart ? Math.floor((m.lastT - m.matchStart) / 1000) : 0;
   const w = m.winners[0];
   return {
     source: id, connected: true, phase: m.phase, round: 0, clock: fmtClock(elapsed), clockSeconds: elapsed, overtime: false, mapName: m.map,

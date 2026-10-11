@@ -33,11 +33,30 @@
       background: rgba(10, 15, 25, 0.4);
       border: 1px dashed rgba(255, 255, 255, 0.1);
     }
+    /* Only shown when the browser actually refuses to play (a normal browser
+       tab with no click yet). OBS starts its browser with
+       --autoplay-policy=no-user-gesture-required, so it never appears there. */
+    #click-audio {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #fff;
+      font-family: -apple-system, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: rgba(10, 15, 25, 0.6);
+    }
   </style>
 </head>
 <body>
   <video id="remote-video" autoplay playsinline></video>
   <div id="status-offline">Waiting for Talent Stream...</div>
+  <div id="click-audio" role="button">Click to start audio</div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -45,63 +64,132 @@
     const signalingHost = window.location.host || '127.0.0.1:7700';
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     
+    const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+    const RETRY_MS = 2000;
+    const LOST_MS = 5000;   // 'disconnected' this long with no recovery = the talent is gone
+
     const remoteVideo = document.getElementById('remote-video');
     const statusOverlay = document.getElementById('status-offline');
+    const clickOverlay = document.getElementById('click-audio');
 
     let pc = null;
     let ws = null;
+    let seq = null;          // the caster connection our pc answers
+    let lostTimer = null;
 
-    function initWebRTC() {
-      pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' }
-        ]
+    function sendSignal(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    }
+
+    function showWaiting(text) {
+      remoteVideo.srcObject = null;
+      statusOverlay.textContent = text || 'Waiting for Talent Stream...';
+      statusOverlay.style.display = 'flex';
+      clickOverlay.style.display = 'none';
+    }
+
+    // Close the current peer connection (if any). Every new offer gets a fresh
+    // one, and the old one must be closed or each talent reconnect leaks one.
+    function closePeer() {
+      clearTimeout(lostTimer);
+      if (!pc) return;
+      pc.ontrack = null; pc.onicecandidate = null; pc.onconnectionstatechange = null;
+      pc.close();
+      pc = null;
+    }
+
+    function tryPlay() {
+      const p = remoteVideo.play();
+      if (!p || !p.then) return;
+      p.then(() => { clickOverlay.style.display = 'none'; }, (err) => {
+        // Only a real autoplay refusal; an AbortError just means the stream changed.
+        if (err && err.name === 'NotAllowedError' && remoteVideo.srcObject) clickOverlay.style.display = 'flex';
       });
+    }
+    clickOverlay.onclick = () => { remoteVideo.play().then(() => { clickOverlay.style.display = 'none'; }, () => {}); };
 
-      pc.ontrack = (event) => {
+    function initWebRTC(offerSeq) {
+      closePeer();
+      seq = offerSeq;
+      const p = pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+      p.ontrack = (event) => {
         console.log('[TALENT-VIEW] Received remote track:', event.track.kind);
-        if (event.streams && event.streams[0]) {
-          remoteVideo.srcObject = event.streams[0];
-          statusOverlay.style.display = 'none';
-        }
+        const stream = event.streams && event.streams[0];
+        if (!stream || pc !== p) return;
+        if (remoteVideo.srcObject !== stream) remoteVideo.srcObject = stream;
+        statusOverlay.style.display = 'none';
+        tryPlay();
       };
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+      p.onicecandidate = (event) => {
+        if (event.candidate && pc === p) sendSignal({ type: 'candidate', candidate: event.candidate, seq: offerSeq });
+      };
+
+      p.onconnectionstatechange = () => {
+        if (pc !== p) return;
+        clearTimeout(lostTimer);
+        if (p.connectionState === 'failed') {
+          // ICE gave up: ask the talent for a fresh try rather than stay black.
+          closePeer(); showWaiting();
+          sendSignal({ type: 'RENEGOTIATE' });
+        } else if (p.connectionState === 'disconnected') {
+          lostTimer = setTimeout(() => { if (pc === p && p.connectionState !== 'connected') { closePeer(); showWaiting(); } }, LOST_MS);
         }
       };
+      return p;
     }
 
     function connectSignaling() {
-      ws = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=obs_receiver&slot=${slot}`);
+      // live=1 tells the hub our media is still playing (we only lost the
+      // socket, e.g. the agent restarted), so it must not renegotiate us.
+      const live = pc && pc.connectionState === 'connected' ? '&live=1' : '';
+      const sock = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=obs_receiver&slot=${encodeURIComponent(slot)}${live}`);
+      ws = sock;
 
-      ws.onopen = () => {
+      sock.onopen = () => {
         console.log('[TALENT-VIEW] Signaling channel connected');
       };
 
-      ws.onmessage = async (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'TALENT_ONLINE') {
-          console.log('[TALENT-VIEW] Talent online, resetting peer connection...');
-          initWebRTC();
-        } else if (msg.type === 'TALENT_OFFLINE') {
-          console.log('[TALENT-VIEW] Talent offline');
-          statusOverlay.style.display = 'flex';
-          remoteVideo.srcObject = null;
-        } else if (msg.type === 'offer') {
-          if (!pc) initWebRTC();
-          await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          ws.send(JSON.stringify({ type: 'answer', answer }));
-        } else if (msg.type === 'candidate' && pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      sock.onmessage = async (event) => {
+        if (ws !== sock) return;
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        try {
+          if (msg.type === 'TALENT_ONLINE') {
+            console.log('[TALENT-VIEW] Talent online');
+          } else if (msg.type === 'TALENT_OFFLINE') {
+            console.log('[TALENT-VIEW] Talent offline', msg.graceful ? '(left)' : '(signaling lost)');
+            // Left on purpose, or no media anyway: clear now. Otherwise the
+            // talent only lost its socket - media is peer to peer and may still
+            // be arriving, so keep it; onconnectionstatechange clears it if not.
+            if (msg.graceful || !pc || pc.connectionState !== 'connected') { closePeer(); showWaiting(); }
+          } else if (msg.type === 'offer') {
+            const p = initWebRTC(msg.seq);
+            await p.setRemoteDescription(msg.offer);
+            const answer = await p.createAnswer();
+            if (pc !== p) return;
+            await p.setLocalDescription(answer);
+            if (pc === p) sendSignal({ type: 'answer', answer: p.localDescription, seq: msg.seq });
+          } else if (msg.type === 'candidate' && pc && (msg.seq == null || msg.seq === seq)) {
+            await pc.addIceCandidate(msg.candidate);
+          }
+        } catch (err) {
+          console.warn(`[TALENT-VIEW] ${msg.type}`, err);
         }
       };
 
-      ws.onclose = () => {
-        setTimeout(connectSignaling, 3000);
+      sock.onclose = (e) => {
+        if (ws !== sock) return;
+        ws = null;
+        if (e.reason === 'replaced') {
+          // A newer receiver took this slot (one per slot). Dialling back in
+          // would just take it back, and the two would fight forever.
+          closePeer();
+          showWaiting('This slot was opened in another receiver - refresh to take it back');
+          return;
+        }
+        setTimeout(connectSignaling, RETRY_MS);
       };
     }
 

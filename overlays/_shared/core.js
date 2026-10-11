@@ -20,7 +20,7 @@
   var state = null;
   var packs = null, pack = null, packReady = false;
   var pageName = 'overlay';
-  var ws = null, retry = null, backoff = 1000, pollTimer = null, connected = false;
+  var ws = null, retry = null, backoff = 1000, pollTimer = null, connected = false, agentVersion = null;
   /* Telemetry presentation delay (stateBuffer.js). Off unless
    * settings.hudDelayMs is set, and when it is off the live frame is emitted
    * straight through on arrival exactly as before - no rAF loop, no extra work
@@ -336,7 +336,16 @@
     ws.onopen = function () { connected = true; backoff = 1000; stopPolling(); document.documentElement.dataset.ws = 'up'; };
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-      if (m.type === 'hello') { if (m.state) setState(m.state); }
+      if (m.type === 'hello') {
+        /* After an update the agent comes back with a new version, but OBS keeps this page
+         * and its old scripts running. Reload once, on the version change only: a plain
+         * restart of the same version never blinks the graphics on air. */
+        if (m.version) {
+          if (agentVersion && m.version !== agentVersion) { location.reload(); return; }
+          agentVersion = m.version;
+        }
+        if (m.state) setState(m.state);
+      }
       else if (m.type === 'state') { setState(m.data); }
       else if (m.type === 'live') {
         if (!state) return;

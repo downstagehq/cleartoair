@@ -53,7 +53,13 @@ export function parsePayload(p, ctx = { events: [], prev: {} }) {
 
   // Round number (map.round is 0-based index of the current round)
   const idx = Number(map.round ?? 0);
-  const roundNo = mp === 'warmup' ? 0 : mp === 'intermission' ? idx : idx + 1;
+  // Rounds played = the two scores, which mean the same thing on every payload. When map.round
+  // increments (at the round's end, or the next freezetime) is not confirmed on a real server, and
+  // the map.round reading put "ROUND 23" on air after a 22-round map. map.round is the fallback.
+  const scored = [map.team_ct?.score, map.team_t?.score].every((v) => v != null && Number.isFinite(Number(v)));
+  const played = scored ? Number(map.team_ct.score) + Number(map.team_t.score) : null;
+  const settled = mp === 'intermission' || mp === 'gameover' || round.phase === 'over';
+  const roundNo = mp === 'warmup' ? 0 : played != null ? (settled ? played : played + 1) : mp === 'intermission' ? idx : idx + 1;
 
   // Clock / bomb
   const endsIn = pc.phase_ends_in != null ? Number(pc.phase_ends_in) : null;

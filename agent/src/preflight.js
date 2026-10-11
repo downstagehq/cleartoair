@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { activeProfile, profileIni, OBS_PROFILES_DIR } from './config.js';
 import { RECIPE_SCENES, RECIPE_BED, RECIPE_PAGES, DESKTOP_AUDIO, GAME_SOURCE } from './obs/collection.js';
-import { captureOrderProblems } from './obs/sync.js';
+import { captureOrderProblems, repointUrl } from './obs/sync.js';
 // Namespace import on purpose: loadInfo() is being added to state.js by another
 // change. Reading a missing export off a namespace is undefined, not a throw, so
 // the state-loads check simply skips until it lands.
@@ -163,7 +163,7 @@ export function createPreflight(ctx) {
     else out.push(ok('audio-bed', 'audio bed correct in every recipe scene'));
   }
 
-  function overlayChecks(out) {
+  async function overlayChecks(out) {
     const st = state.get();
     const pack = packs.get(st.game);
     const pages = hub.overlayPages();
@@ -176,7 +176,20 @@ export function createPreflight(ctx) {
     const missing = [...want].filter((p) => !pages[p]);
     const total = hub.overlayCount();
     if (!missing.length) out.push(ok('browser-sources-online', `overlays connected: ${total}`, Object.entries(pages).map(([k, v]) => `${k}×${v}`).join(', ')));
-    else if (bridge.status().connected && bridge.status().ready) out.push(fail('browser-sources-online', `${missing.length} graphics page(s) not running in OBS`, `no OBS browser source connected for: ${missing.join(', ')}`, 'Press ⌘K → "Refresh graphics browser sources". If it stays red, the collection is missing that page: close OBS, then Setup tab → OBS collection → "Hold to install".'));
+    else if (bridge.status().connected && bridge.status().ready) {
+      // The commonest cause seen on a bench: the collection points its graphics at another
+      // address (an agent on another port installed it). A refresh cannot fix that; a sync can.
+      const elsewhere = [];
+      try {
+        for (const i of await bridge.listInputs('browser_source')) {
+          if (!/^GFX · /.test(i.name)) continue;
+          const url = (await bridge.getInputSettings(i.name)).url;
+          if (repointUrl(url, `http://127.0.0.1:${ctx.port}`)) elsewhere.push(String(url).replace(/^(https?:\/\/[^/]+).*$/, '$1'));
+        }
+      } catch { /* listing is a hint only */ }
+      if (elsewhere.length) out.push(fail('browser-sources-online', `OBS shows graphics from ${[...new Set(elsewhere)].join(', ')}, not this Clear to Air`, `this agent is http://127.0.0.1:${ctx.port}; no OBS browser source connected for: ${missing.join(', ')}`, 'Setup tab → OBS collection → "Sync OBS". It repoints the graphics at this agent without closing OBS.'));
+      else out.push(fail('browser-sources-online', `${missing.length} graphics page(s) not running in OBS`, `no OBS browser source connected for: ${missing.join(', ')}`, 'Press ⌘K → "Refresh graphics browser sources". If it stays red, the collection is missing that page: close OBS, then Setup tab → OBS collection → "Hold to install".'));
+    }
     else out.push(warn('browser-sources-online', `overlays connected: ${total}`, `not yet connected: ${missing.join(', ')} (normal while OBS is closed)`));
   }
 
@@ -282,7 +295,7 @@ export function createPreflight(ctx) {
       const out = [ok('agent-up', `agent up ${Math.round(process.uptime())} s`, `pid ${process.pid}, port ${ctx.port}`)];
       try { stateChecks(out); } catch (e) { out.push(fail('state-loads', 'The show check crashed', e.message, 'Press "Run again" on the Preflight tab; if it stays, restart Clear to Air.')); }
       try { await obsChecks(out); } catch (e) { out.push(warn('obs-connected', 'OBS check threw', e.message)); }
-      try { overlayChecks(out); } catch (e) { out.push(warn('browser-sources-online', 'overlay check threw', e.message)); }
+      try { await overlayChecks(out); } catch (e) { out.push(warn('browser-sources-online', 'overlay check threw', e.message)); }
       try { await diskChecks(out); } catch (e) { out.push(warn('disk-space', 'disk check threw', e.message)); }
       if (watchdog) out.push(...watchdog.warnings());
       const fails = out.filter((c) => c.level === 'fail').length;

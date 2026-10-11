@@ -117,7 +117,7 @@
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
         .then(function (res) {
           if (res.ok && res.d.ok) {
-            say('Done. We will email you once, at launch.');
+            say('Done. We will email you once, at 1.0.');
             input.value = '';
             input.blur();
           } else if (res.d.code === 'unconfigured') {

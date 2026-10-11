@@ -10,7 +10,7 @@ import { sceneKey, bedTalent, audioSourceName, expectedBed, checkBed, renderRepo
 import { RECIPE_SCENES, RECIPE_BED, DESKTOP_AUDIO } from './obs/collection.js';
 import { slug as lpSlug, WIKI_FOR_PACK, parseSquad, parseInfobox, parsePlayerInfobox, parseRosterHtml, plain } from './liquipedia.js';
 import { gameSwitchPatch, newEventState, defaultRundown, cardsFor, headlineCard, vetoPool, rosterSize } from './game.js';
-import { genericUrl } from './obs/sync.js';
+import { genericUrl, repointUrl } from './obs/sync.js';
 import { build, GAME_SOURCE } from './obs/collection.js';
 import { compareVersions } from './update.js';
 import { defaultState } from './state.js';
@@ -452,18 +452,36 @@ console.log('\n== talent studio: signaling ==');
   await settle();
   eq(hub.talent.status().caster1, { caster: true, receivers: 1, offer: true }, 'the slot reports one caster and one receiver');
 
-  // the case the clients cannot handle themselves: OBS restarts mid-show, so a
-  // receiver joins after the caster has already sent its offer
+  // OBS refreshes or restarts mid-show, after the call was set up: the standing
+  // offer has already been answered, and replaying it would get an answer the
+  // caster can no longer apply (black source - docs/TALENT-BENCH.md case B).
+  // The hub asks the caster for a fresh offer instead.
   rx.close();
   await settle();
+  const renegotiate = next(tx, (m) => m.type === 'RENEGOTIATE');
   const rx2 = await open(url('obs_receiver', 'caster1'));
-  const replayed = await next(rx2, (m) => m.type === 'offer');
-  eq(replayed.offer.sdp, 'OFFER-1', 'a receiver joining late is replayed the standing offer');
-  const replayedCand = await next(rx2, (m) => m.type === 'candidate');
-  eq(replayedCand.candidate.c, 'from-caster', 'buffered candidates are replayed to a late receiver');
+  eq((await renegotiate).type, 'RENEGOTIATE', 'a receiver joining after the offer was answered gets the caster asked for a fresh offer');
+  const freshOffer = next(rx2, (m) => m.type === 'offer');
+  tx.send(JSON.stringify({ type: 'offer', offer: { sdp: 'OFFER-2' }, seq: 2 }));
+  eq((await freshOffer).offer.sdp, 'OFFER-2', 'the fresh offer reaches the new receiver');
+  tx.send(JSON.stringify({ type: 'candidate', candidate: { c: 'from-caster-2' }, seq: 2 }));
+  await settle();
+
+  // the case the clients cannot handle themselves: a receiver joins after the
+  // caster sent its offer but before anyone answered it
+  rx2.close();
+  await settle();
+  const rx3 = await open(url('obs_receiver', 'caster1'));
+  eq((await next(rx3, (m) => m.type === 'offer')).offer.sdp, 'OFFER-2', 'a receiver joining before anyone answered is replayed the standing offer');
+  eq((await next(rx3, (m) => m.type === 'candidate')).candidate.c, 'from-caster-2', 'buffered candidates are replayed to a late receiver');
+
+  // one receiver per slot: the newest replaces the older one
+  const rx3closed = new Promise((res) => rx3.once('close', (_code, reason) => res(String(reason))));
+  const rx4 = await open(url('obs_receiver', 'caster1'));
+  eq(await rx3closed, 'replaced', 'a newer receiver on the slot replaces the older one');
 
   // caster drops
-  const offline = next(rx2, (m) => m.type === 'TALENT_OFFLINE');
+  const offline = next(rx4, (m) => m.type === 'TALENT_OFFLINE');
   tx.close();
   ok((await offline).type === 'TALENT_OFFLINE', 'the receiver is told when the caster drops');
   await settle();
@@ -488,7 +506,7 @@ console.log('\n== talent studio: signaling ==');
   const strayFailed = await new Promise((res) => { stray.once('error', () => res(true)); stray.once('open', () => res(false)); });
   ok(strayFailed, 'an unknown websocket path is refused');
 
-  rx2.close(); a.close(); b.close();
+  rx4.close(); a.close(); b.close();
   await settle();
   hub.close();
   await new Promise((r) => server.close(r));
@@ -574,6 +592,12 @@ ok(!('nw' in rows[1]), 'a column the player has no value for is left off, so the
 eq(liveScoreboardRows({ series: {}, live: { connected: false, players: [dotaPlayer] } }, ['k']), [], 'a disconnected feed contributes nothing');
 eq(liveScoreboardRows({ series: { teamA: 'alpha' }, live: { connected: true, players: [] } }, ['k']), [], 'no players means no rows');
 eq(liveScoreboardRows({}, ['k']), [], 'no live block is not an error');
+// After the final whistle the feed drops (or a Rocket League lobby closes and empties the players):
+// the agent's live.result for THIS title is what the post-match card shows.
+const RESULT = { game: 'rocketleague', scoreA: 2, scoreB: 1, players: [{ ...rlPlayer, team: 'A', name: 'Zephyr' }, rlPlayer] };
+eq(liveScoreboardRows({ game: 'rocketleague', series: { teamA: 'alpha', teamB: 'bravo' }, live: { connected: false, players: [], result: RESULT } }, ['goals']).map((r) => `${r.team}:${r.ign}:${r.goals}`), ['alpha:Zephyr:3', 'bravo:Rift:3'], 'feed gone after game over: the last finished game fills the card');
+eq(liveScoreboardRows({ game: 'cs2', series: { teamA: 'alpha', teamB: 'bravo' }, live: { connected: false, players: [], result: RESULT } }, ['goals']), [], 'a result from another title is never shown');
+eq(liveScoreboardRows({ game: 'rocketleague', series: { teamA: 'alpha', teamB: 'bravo' }, live: { connected: true, players: [dotaPlayer], result: RESULT } }, ['k']).map((r) => r.ign), ['Zephyr'], 'a connected feed with players wins over the old result');
 
 console.log('\n== liquipedia: names and wikis ==');
 // The slug becomes a filename under packs/<game>/assets/teams, so it has to be
@@ -666,6 +690,12 @@ ok(builtApex.sources.some((x) => x.name === GAME_SOURCE && x.id === 'game_captur
 eq(genericUrl('http://127.0.0.1:7700/packs/rocketleague/overlay/desk.html?who=hosts'), 'http://127.0.0.1:7700/overlay/desk.html?who=hosts', 'an old per-pack URL maps to the generic page, query kept');
 eq(genericUrl('http://127.0.0.1:7700/overlay/ingame.html'), null, 'an already-generic URL is left alone');
 eq(genericUrl('https://vdo.ninja/?room=x'), null, 'a VDO.Ninja source is never touched');
+eq(repointUrl('http://127.0.0.1:7700/overlay/ingame.html', 'http://127.0.0.1:7720'), 'http://127.0.0.1:7720/overlay/ingame.html', 'a graphics page pointing at another agent port is repointed to this agent');
+eq(repointUrl('http://localhost:7700/packs/cs2/overlay/desk.html?who=hosts', 'http://127.0.0.1:7720'), 'http://127.0.0.1:7720/overlay/desk.html?who=hosts', 'old per-pack URL on localhost: generic page, this origin, query kept');
+eq(repointUrl('http://127.0.0.1:7720/overlay/cards.html', 'http://127.0.0.1:7720'), null, 'already right: left alone');
+eq(repointUrl('https://vdo.ninja/?room=x&view=a', 'http://127.0.0.1:7720'), null, 'VDO.Ninja is never repointed');
+eq(repointUrl('http://192.168.1.20:7700/overlay/ingame.html', 'http://127.0.0.1:7720'), null, 'a page on another machine is not ours to move');
+eq(build({ state: { game: 'cs2', settings: {}, talent: [] }, port: 7720 }).sources.filter((x) => x.id === 'browser_source' && /^GFX · /.test(x.name)).every((x) => x.settings.url.startsWith('http://127.0.0.1:7720/overlay/')), true, 'the collection points its graphics at the port this agent listens on (--port), not 7700');
 for (const p of ['ingame', 'cards', 'standby', 'desk']) ok(fs.existsSync(path.resolve(PACKS_DIR, '..', 'overlays', 'live', `${p}.html`)), `overlays/live/${p}.html exists`);
 
 console.log('\n== liquipedia: rosters ==');
@@ -763,6 +793,13 @@ console.log('\n== state: live updates replace per-map data ==');
   eq(l.bomb, { state: 'none', countdown: 30 }, 'other live objects still deep-merge');
   st.setLive({ scoreA: 2 });
   eq(Object.keys(l.extra.roundWins), ['1'], 'an update without extra leaves the current extra alone');
+
+  st.setLive({ source: 'cs2gsi', connected: true, phase: 'live', scoreA: 12, scoreB: 9, players: [{ team: 'A', name: 'Zephyr', kills: 20 }] });
+  ok(!st.get().live.result, 'no result while the game is still being played');
+  st.setLive({ source: 'cs2gsi', connected: true, phase: 'gameover', scoreA: 13, scoreB: 9, players: [{ team: 'A', name: 'Zephyr', kills: 21 }] });
+  st.setLive({ source: 'cs2gsi', connected: false, phase: 'unknown', players: [] });
+  const res = st.get().live.result;
+  ok(res && res.scoreA === 13 && res.players[0].kills === 21 && res.game === st.get().game && st.get().live.players.length === 0, 'game over keeps a result that outlives the feed dropping and the players emptying');
 
   console.log('\n== state: stale feed watchdog ==');
   const now = Date.now();

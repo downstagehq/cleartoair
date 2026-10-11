@@ -1,0 +1,32 @@
+{
+  "adapter": "apexlive",
+  "payloads": 29,
+  "final": {
+    "phase": "gameover",
+    "mapName": "mp_rr_tropic_island_mu2",
+    "scoreA": 1,
+    "scoreB": 2,
+    "sideA": "SQUADS",
+    "sideB": "ELIMINATED",
+    "names.A": "Squads",
+    "names.B": "Eliminated",
+    "players.length": 9,
+    "overtime": false,
+    "mode": "br",
+    "round": 0,
+    "squads.length": 3,
+    "extra.winner": "Alpha",
+    "clock": "4:13"
+  },
+  "events": [
+    "info",
+    "match_start",
+    "ring",
+    "down",
+    "kill",
+    "squad_eliminated",
+    "match_end"
+  ],
+  "problems": 0,
+  "why": "Squads, placements and the match clock (from the game timestamps, not this PC clock)."
+}

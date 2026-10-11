@@ -2,10 +2,11 @@
 //
 // This parses a scoreboard that a human has pasted or typed - the end-of-map
 // stats screen copied out of the game client, a Tab-screen transcription, a
-// tournament sheet. It does NOT read pixels: there is no OCR in this build, and
-// an endpoint that guesses numbers off a screenshot and reports a confidence is
-// worse than no endpoint at all, because a wrong ACS goes to air looking exactly
-// like a right one. Send an image and you get a clear 415 instead.
+// tournament sheet. It does NOT read pixels. stats/ocr.js does (Windows' own
+// engine), and hands this parser TEXT, so there is one parser. An image is only
+// ever answered as a preview for the operator to check: a guessed number is worse
+// than none, because a wrong ACS goes to air looking exactly like a right one, so
+// a cell the OCR is unsure of is left empty with a warning.
 //
 // Output is the shape the overlay packs already render
 // (overlays/_shared/render.js -> cards.scoreboard):

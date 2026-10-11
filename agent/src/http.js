@@ -4,13 +4,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { WEB_DIST, PACKS_DIR, OVERLAYS_DIR, REPORTS_DIR } from './config.js';
-import { build, install, summarize, obsRunning, REPLAY_SOURCE } from './obs/collection.js';
+import { build, install, summarize, obsRunning, REPLAY_SOURCE, GAME_SOURCE } from './obs/collection.js';
 import { syncGame } from './obs/sync.js';
 import { gameSwitchPatch, newEventState, defaultRundown, rosterSize } from './game.js';
 import { OBS_SCENES_DIR, UPDATE_URL, EXTRA_ORIGINS } from './config.js';
 import { checkForUpdate, currentVersion, installKind } from './update.js';
 import { diff } from './obs/drift.js';
 import { parseScoreboard } from './stats/scoreboard.js';
+import { ocrImage, readScoreboard } from './stats/ocr.js';
 import { log } from './log.js';
 import * as liquipedia from './liquipedia.js';
 
@@ -162,7 +163,7 @@ function routes(ctx) {
   /** Their terms want real contact details in the User-Agent: the operator's if set, else the product's site (not an invented address). */
   const contactEmail = () => state.get().settings?.contactEmail || state.get().event?.contact || 'https://cleartoair.com';
   const lpConfig = () => ({ contactEmail: contactEmail(), version: currentVersion() });
-  const desired = () => build({ state: state.get(), pack: currentPack(), root: ctx.root });
+  const desired = () => build({ state: state.get(), pack: currentPack(), root: ctx.root, port });
 
   return [
     ['GET', /^\/healthz$/, () => {
@@ -296,6 +297,7 @@ function routes(ctx) {
       const pack = packs.get(game);
       if (!pack) throw Object.assign(new Error(`no pack "${game}" (have: ${packs.list().map((p) => p.id).join(', ')})`), { status: 404 });
       const before = state.get();
+      const fromGame = before.game; // state.get() is live: read it before the patch lands
       const { patch, reset, kept } = gameSwitchPatch(before, pack, game);
       state.patch(patch);
 
@@ -310,11 +312,11 @@ function routes(ctx) {
 
       let obs = null;
       if (body.syncObs !== false && bridge.status().connected && bridge.status().ready) {
-        try { obs = await syncGame({ bridge, state: state.get(), pack, log }); }
+        try { obs = await syncGame({ bridge, state: state.get(), pack, log, origin: `http://127.0.0.1:${port}` }); }
         catch (e) { obs = { ok: false, error: e.message }; log.warn('obs', `sync after game switch failed: ${e.message}`); }
       }
-      log.info('game', `switched ${before.game} -> ${game}; reset ${reset.join(', ')}${stopped.length ? `; stopped ${stopped.join(', ')}` : ''}`);
-      return { ok: true, game, from: before.game, pack: true, pool: patch.veto.pool, reset, kept, stopped, obs };
+      log.info('game', `switched ${fromGame} -> ${game}; reset ${reset.join(', ')}${stopped.length ? `; stopped ${stopped.join(', ')}` : ''}`);
+      return { ok: true, game, from: fromGame, pack: true, pool: patch.veto.pool, reset, kept, stopped, obs };
     }],
     ['GET', /^\/api\/game\/rundown$/, () => ({ ok: true, rows: defaultRundown(currentPack()) })],
     // A clean event for one title. Keeps settings and talent (they belong to the desk).
@@ -425,7 +427,7 @@ function routes(ctx) {
       log.info('obs', `collection removed: ${file} -> ${path.basename(dest)}`);
       return { ok: true, file, backup: dest };
     }],
-    ['POST', /^\/api\/obs\/sync$/, () => syncGame({ bridge, state: state.get(), pack: currentPack(), log })],
+    ['POST', /^\/api\/obs\/sync$/, () => syncGame({ bridge, state: state.get(), pack: currentPack(), log, origin: `http://127.0.0.1:${port}` })],
     ['POST', /^\/api\/obs\/([a-z-]+)$/, ({ params, body }) => obsAction(params[0], body)],
     ['GET', /^\/api\/preflight$/, () => preflight.last()],
     ['POST', /^\/api\/preflight\/run$/, () => preflight.run()],
@@ -447,23 +449,39 @@ function routes(ctx) {
     ['POST', /^\/api\/remote\/kick$/, ({ body }) => remote().kick(String(body.seat || ''))],
     ['GET', /^\/api\/rehearse$/, () => ctx.rehearsal.last() || { ok: false, error: 'no rehearsal has run yet' }],
     ['POST', /^\/api\/rehearse$/, ({ body }) => ctx.rehearsal.run({ shots: body.shots !== false })],
-    // Scoreboard ingest. There is no pixel OCR in this build - a screenshot is
-    // refused outright rather than answered with invented numbers (see
-    // stats/scoreboard.js). Pasted text is parsed into state.stats.scoreboard.
-    ['POST', /^\/api\/stats\/ocr$/, ({ body }) => {
-      if (body.image || body.imageData || body.png) {
-        return { status: 415, json: { ok: false, error: 'this build cannot read a scoreboard image - paste the scoreboard text instead (field "text")' } };
-      }
+    // Scoreboard ingest. Pasted text is parsed into state.stats.scoreboard. An
+    // image (base64 PNG in image/imageData/png, or source:"obs" = the game capture
+    // in OBS, never the program with our own graphics on it) is OCR'd with Windows'
+    // own engine (stats/ocr.js) and answered as a PREVIEW - never applied in the same
+    // call. A cell the engine is unsure of comes back empty with a warning, never
+    // guessed. The operator confirms by posting the returned (edited) text.
+    ['POST', /^\/api\/stats\/ocr$/, async ({ body }) => {
       const s = state.get();
       const pack = currentPack();
       const columns = (pack && pack.stats && pack.stats.scoreboardColumns) || ['k', 'd', 'a'];
-      const { rows, warnings, matched } = parseScoreboard({
-        text: body.text, columns, teams: s.teams, teamA: s.series.teamA, teamB: s.series.teamB,
-      });
       const mapIndex = Number.isInteger(body.mapIndex) ? body.mapIndex : s.series.mapIndex;
-      if (body.apply !== false) state.patch({ stats: { scoreboard: { mapIndex, rows } } });
-      log.info('stats', `scoreboard: ${rows.length} row(s) parsed (teams by ${matched})${warnings.length ? ` - ${warnings.length} warning(s)` : ''}`);
-      return { ok: true, applied: body.apply !== false, mapIndex, columns, matched, rows, warnings };
+      const image = body.image || body.imageData || body.png;
+      let text = body.text;
+      let ocr = null;
+      if (image || body.source === 'obs') {
+        const png = image
+          ? Buffer.from(String(image).replace(/^data:image\/\w+;base64,/, ''), 'base64')
+          : await bridge.sourceScreenshot(String(body.sourceName || GAME_SOURCE), 1920);
+        const r = await ocrImage(png, { timeoutMs: 20000 });
+        if (!r.ok) return { status: r.status || 422, json: { ok: false, error: r.reason } };
+        const roster = Object.values(s.teams || {}).flatMap((t) => ((t && t.roster) || []).map((p) => p && p.ign)).filter(Boolean);
+        const read = readScoreboard(r.lines, { columns, roster });
+        if (!read.rows.length) return { status: 422, json: { ok: false, error: 'no scoreboard rows were read from the image - paste the text instead', warnings: read.warnings, ocrText: r.text } };
+        text = read.text;
+        ocr = { engine: r.engine, ms: r.ms, header: read.header, cells: read.rows, warnings: read.warnings };
+      }
+      const { rows, warnings, matched } = parseScoreboard({
+        text, columns, teams: s.teams, teamA: s.series.teamA, teamB: s.series.teamB,
+      });
+      const apply = !ocr && body.apply !== false;
+      if (apply) state.patch({ stats: { scoreboard: { mapIndex, rows } } });
+      log.info('stats', `scoreboard: ${rows.length} row(s) ${ocr ? `read from an image in ${ocr.ms} ms (preview, not applied)` : 'parsed'} (teams by ${matched})${warnings.length ? ` - ${warnings.length} warning(s)` : ''}`);
+      return { ok: true, applied: apply, mapIndex, columns, matched, rows, warnings: ocr ? [...ocr.warnings, ...warnings] : warnings, ...(ocr ? { source: 'image', text, ocr } : {}) };
     }],
   ];
 }

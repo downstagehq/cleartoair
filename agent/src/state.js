@@ -397,6 +397,13 @@ export function setLive(partial) {
   }
   merge(state.live, rest);
   if (partial.updatedAt == null) state.live.updatedAt = Date.now();
+  // The last finished game, kept after the feed drops or the lobby closes (a Rocket League
+  // MatchDestroyed empties the players; a CS2 server changes map). The post-match scoreboard
+  // card is wanted exactly then, and it used to read NO ROWS. Never sent by an adapter.
+  const lv = state.live;
+  if ((lv.phase === 'gameover' || lv.phase === 'podium') && Array.isArray(lv.players) && lv.players.length) {
+    lv.result = clean(structuredClone({ at: lv.updatedAt, game: state.game, source: lv.source, mapName: lv.mapName, scoreA: lv.scoreA, scoreB: lv.scoreB, names: lv.names, players: lv.players }));
+  }
   if (staleMarked) { staleMarked = false; log.info('live', `${state.live.source}: feed resumed`); }
   emitLive();
   return state.live;

@@ -61,6 +61,8 @@ button { font: inherit; color: inherit; }
   color: var(--ink-3);
 }
 .eyebrow { display: block; margin-bottom: 14px; }
+/* ink-3 on the panel greys is under 4.5:1 (Lighthouse a11y); these two sit on bg-1/bg-2 */
+.proof .eyebrow, .faq-more { color: var(--ink-2); }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* ---------- Lamp (brand signature) ---------- */

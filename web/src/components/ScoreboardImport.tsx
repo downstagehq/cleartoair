@@ -1,12 +1,17 @@
-// Paste a scoreboard, read what the agent made of it, then apply it.
+// Paste a scoreboard (or read one off the game feed / an image), read what the
+// agent made of it, then apply it.
+//
+// Reading an image never applies anything: the agent answers with the text it
+// read, which lands in the box below to check and edit like a paste. A cell the
+// OCR was unsure of is left empty with a warning, never guessed.
 //
 // The parse is always run as a dry run first (apply:false) and shown back
 // grouped by team, because the one thing that must not happen is rows going
 // to air on the wrong side. Nothing reaches state until the operator presses
 // Apply.
 
-import { useState } from 'react';
-import { ClipboardPaste, Check, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ClipboardPaste, Check, X, ScanText, ImageUp } from 'lucide-react';
 import { Button } from './Button';
 import { Panel, Empty } from './Panel';
 import { Pill } from './Pill';
@@ -27,6 +32,8 @@ interface ParseResult {
   matched: string;
   rows: ParsedRow[];
   warnings: string[];
+  source?: 'image';
+  text?: string;
 }
 
 const PLACEHOLDER = `Alpha
@@ -42,6 +49,28 @@ export function ScoreboardImport() {
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const seat = useStore((s) => s.seat);
+  const obsUp = useStore((s) => s.obs.connected);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const read = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      const r = await post<ParseResult>('/api/stats/ocr', body);
+      setText(r.text ?? '');
+      setResult(r);
+      toastOk(`Read ${r.rows.length} rows`, 'check them, fix anything wrong in the text, then Apply');
+    } catch (e) {
+      toastErr('Scoreboard not read', errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const readFile = (file: File) => {
+    const fr = new FileReader();
+    fr.onload = () => void read({ image: String(fr.result || '') });
+    fr.readAsDataURL(file);
+  };
 
   const run = async (apply: boolean) => {
     if (!text.trim()) return;
@@ -70,7 +99,7 @@ export function ScoreboardImport() {
       title="Scoreboard import"
       actions={
         <span className="text-[11px] text-ink-3">
-          paste the end-of-map stats · no image reading in this build
+          paste the end-of-map stats{seat ? '' : ', or read them off the game feed (Windows OCR, check before Apply)'}
         </span>
       }
     >
@@ -99,6 +128,17 @@ export function ScoreboardImport() {
             >
               Apply to map {(result ? result.mapIndex : state.series.mapIndex) + 1}
             </Button>
+            {seat ? null : (
+              <>
+                <Button size="sm" icon={<ScanText size={13} />} disabled={busy || !obsUp} title="Read the end-of-map scoreboard off GAME · Capture in OBS (the game feed, not program)" onClick={() => void read({ source: 'obs' })}>
+                  Read game feed
+                </Button>
+                <Button size="sm" variant="ghost" icon={<ImageUp size={13} />} disabled={busy} title="Read a PNG screenshot of the scoreboard" onClick={() => fileRef.current?.click()}>
+                  Read image
+                </Button>
+                <input ref={fileRef} type="file" accept="image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
+              </>
+            )}
             {result ? (
               <Button size="sm" variant="ghost" icon={<X size={13} />} onClick={() => setResult(null)}>
                 Clear
@@ -111,12 +151,13 @@ export function ScoreboardImport() {
           {!result ? (
             <Empty
               title="Nothing parsed yet"
-              hint="Paste the scoreboard and press Parse. Rows are shown here for checking before anything reaches the graphics."
+              hint="Paste the scoreboard and press Parse, or read it off the game feed. Rows are shown here for checking before anything reaches the graphics."
             />
           ) : (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <Pill tone="ok">{result.rows.length} rows</Pill>
+                {result.source === 'image' ? <Pill tone="warn">read from an image · not applied</Pill> : null}
                 <Pill tone={result.matched === 'headers' || result.matched === 'roster' ? 'ok' : 'warn'}>teams by {result.matched}</Pill>
                 {unplaced.length ? <Pill tone="warn">{unplaced.length} unplaced</Pill> : null}
               </div>
