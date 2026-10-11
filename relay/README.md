@@ -64,8 +64,10 @@ Paste it into **Setup → Remote seats** on the rig. That writes it to
 `agent/data/remote.json`; it is deliberately not a setting in the desk's state,
 because whoever names the relay names where a show's control traffic goes.
 
-A custom host later (`room.cleartoair.app`) is a `[[routes]]` entry here plus
-the DNS record; the agent only ever needs the new address pasted in once.
+A custom host is a `[[routes]]` entry here; when the zone is on the same Cloudflare
+account, wrangler makes the DNS record. Downstage's own copy runs at
+`https://room.cleartoair.com` (see `wrangler.toml`), free while remote seats are in beta.
+The agent only ever needs an address pasted in once.
 
 ## How a seat happens
 

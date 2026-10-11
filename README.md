@@ -104,9 +104,13 @@ producers by hand. Every request is checked on the broadcast PC against a
 deny-by-default policy, and passwords and tokens are stripped before anything
 leaves it. You can run your own relay on Cloudflare's free plan with one
 `npx wrangler deploy` (see [`relay/README.md`](relay/README.md) and
-[`docs/REMOTE.md`](docs/REMOTE.md)). The relay has been tested end to end on a
-local harness; it has not yet been run on Cloudflare. A hosted relay run by
-Downstage is planned.
+[`docs/REMOTE.md`](docs/REMOTE.md)).
+
+Or use ours: **`https://room.cleartoair.com`**, run by Downstage and free while remote
+seats are in beta. Paste it into **Setup → Remote seats** on the broadcast PC. It was
+tested over the internet on 11 October 2026: a rig on one connection, a producer in a
+browser on another, admitted at the door, with changes flowing both ways, settings
+refused and the password redacted. It has not yet carried a real show with OBS attached.
 
 ## Licence
 

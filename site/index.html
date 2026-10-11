@@ -375,7 +375,7 @@
         <span class="label eyebrow">Runs on your OBS</span>
         <h2 id="obs-h" style="font-size:clamp(28px,3.4vw,38px);line-height:1.1;margin-bottom:16px">It does not replace OBS. It stands next to it.</h2>
         <p>Clear to Air never sits between OBS and your encoder. A small agent runs on the broadcast PC, talks to OBS over OBS's own websocket, serves the overlays as local browser sources, and runs preflight, drift detection and the watchdogs on that machine.</p>
-        <p>The control room is a web page the agent serves at 127.0.0.1:7700. Remote seats are built and in beta: a producer or scorer on another laptop drives the desk through a relay that the broadcast PC dials out to. You can run that relay yourself today; a hosted one is coming.</p>
+        <p>The control room is a web page the agent serves at 127.0.0.1:7700. Remote seats are built and in beta: a producer or scorer on another laptop drives the desk through a relay that the broadcast PC dials out to. Use ours at room.cleartoair.com, free while it is in beta, or run the relay yourself.</p>
         <ul class="arch-list">
           <li><b>Local first.</b> If the venue internet drops, the agent, the overlays and the show keep running. One exception: VALORANT map art loads from valorant-api.com, so it will be missing offline.</li>
           <li><b>Nothing installed inside OBS.</b> No plugin to break on the next OBS update. It uses obs-websocket, which ships with OBS.</li>
@@ -513,7 +513,7 @@
       <div class="support-card reveal" data-delay="2">
         <span class="tag">Coming</span>
         <h3>Hosted control room</h3>
-        <p>Hand the desk to a producer or scorer on a laptop anywhere. Running the relay yourself is free. Our hosted relay will be free while it is in beta, and later becomes a supporter perk.</p>
+        <p>Hand the desk to a producer or scorer on a laptop anywhere. Our hosted relay is live at <b>room.cleartoair.com</b>, free while it is in beta: paste it into Setup &rarr; Remote seats. Running the relay yourself is free too.</p>
         <a class="btn btn-block" href="#open-source" data-repo-path="/tree/main/relay" data-repo-soon="Relay source at public launch">Run the relay yourself</a>
       </div>
       <div class="support-card reveal" data-delay="3">

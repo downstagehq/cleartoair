@@ -9,7 +9,13 @@
 name = "cleartoair-room"
 main = "src/worker.js"
 compatibility_date = "2026-09-01"
-workers_dev = true
+workers_dev = false
+
+# The hosted address (11 Oct 2026). cleartoair.com's zone is on the same account, so
+# wrangler creates the DNS record. workers.dev is off: the account subdomain is not ours to show.
+routes = [
+  { pattern = "room.cleartoair.com", custom_domain = true }
+]
 
 [assets]
 directory = "./public"
