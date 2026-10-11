@@ -217,6 +217,11 @@
    * correction meant it. This is the fallback, so a live match fills the card
    * instead of leaving NO ROWS on screen for every title that has a real feed.
    * Live players carry team 'A'/'B'; the card filters by team id, so map them. */
+  /* The standby scenes (01 STARTING SOON, 06 BRB, 08 OUTRO) carry the in-game layer for its
+   * ticker and corner tag, and the scorebug sat on top of the standby title. The bug follows
+   * show.bug everywhere else. */
+  function standbyScene(program) { return /^(01|06|08)(?!\d)/.test(String(program || '').trim()); }
+
   function finalResult(s) {
     var r = s && s.live && s.live.result;
     return r && r.game === s.game && Array.isArray(r.players) && r.players.length ? r : null;
@@ -437,7 +442,7 @@
     CTA.onState(function (s) {
       var sh = s.show || {}, ev = s.event || {};
       renderBug(s);
-      show($('bug'), !!sh.bug);
+      show($('bug'), !!sh.bug && !standbyScene(CTA.program));
 
       var lt = sh.lowerThird || {};
       html($('lt'), '<div class="plate edge-left"><div class="lg">' + brandLogo(s, initials(ev.name)) + '</div><div class="tx">' +
@@ -1007,5 +1012,5 @@
     });
   }
 
-  CTA.render = { ingame: ingame, cards: cards, standby: standby, desk: desk, BUG: BUG, CARD: CARD, mapTile: mapTile, html: html, objectiveRows: objectiveRows, roundHistory: roundHistory, playerStat: playerStat, liveScoreboardRows: liveScoreboardRows };
+  CTA.render = { ingame: ingame, cards: cards, standby: standby, desk: desk, BUG: BUG, CARD: CARD, mapTile: mapTile, html: html, objectiveRows: objectiveRows, roundHistory: roundHistory, playerStat: playerStat, liveScoreboardRows: liveScoreboardRows, standbyScene: standbyScene };
 })(window);

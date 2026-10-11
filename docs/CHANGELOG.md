@@ -41,6 +41,9 @@ Newest first. One section per release; the notes for `gh release create` come fr
   camera or mic mid-call; a page that cannot autoplay shows "Click to start audio". Still
   same-PC only: the join page is not reachable from another device yet, and there is no
   TURN server (see `docs/TALENT-BENCH.md`). VDO.Ninja remains the default.
+- **No scorebug over STARTING SOON.** Scenes 01, 06 and 08 carry the in-game layer for its
+  ticker and corner tag, and with the bug switched on (the default) it sat on top of the
+  standby title. The bug now hides while one of those scenes is on program.
 - CS2: the round number comes from the two scores. It showed ROUND 23 after a 22-round map.
 - Apex: the match clock runs on the game's timestamps, not this PC's clock.
 - Rocket League: the winner is always the side (BLUE/ORANGE), and an empty `Winner` in a

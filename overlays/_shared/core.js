@@ -264,6 +264,17 @@
     simEl.hidden = false;
   }
 
+  /* OBS's program scene, from the agent's obs status. One browser source is shared by every
+   * scene that carries it, so a page can only tell which scene is on air from here. Returns
+   * true when it changed (the status is broadcast often - meters - and must not re-render). */
+  var program = '';
+  function noteProgram(obs) {
+    var p = obs && typeof obs.program === 'string' ? obs.program : '';
+    if (p === program) return false;
+    program = p;
+    return true;
+  }
+
   function setState(s) {
     if (!s) return;
     state = s;
@@ -344,8 +355,10 @@
           if (agentVersion && m.version !== agentVersion) { location.reload(); return; }
           agentVersion = m.version;
         }
+        noteProgram(m.obs);
         if (m.state) setState(m.state);
       }
+      else if (m.type === 'obs') { if (noteProgram(m.data) && state) emitState(); }
       else if (m.type === 'state') { setState(m.data); }
       else if (m.type === 'live') {
         if (!state) return;
@@ -375,6 +388,7 @@
     onReady: function (fn) { if (packReady) fn(pack); else readyFns.push(fn); },
     get state() { return state; },
     get connected() { return connected; },
+    get program() { return program; },
     pack: null, packs: null,
     fallbackPacks: FALLBACK_PACKS,
     team: team, esc: esc, txt: txt, show: show, mapArt: mapArt, findMap: findMap, applyBrand: applyBrand,
