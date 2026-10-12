@@ -147,7 +147,7 @@ Round 2 closes this **over the relay**, keeping its security model:
 - slot-bound, single-use, 15-minute links with a per-seat cookie, which is the token;
 - HTTPS from the relay origin.
 
-The agent stays loopback-only. **It goes live only when the relay is redeployed with this `relay/src`.**
+The agent stays loopback-only. The hosted relay (room.cleartoair.com) carries it since the 12 October redeploy.
 
 ## Still open
 
@@ -203,7 +203,7 @@ The agent stays loopback-only. **It goes live only when the relay is redeployed 
 **Setup:** the **laptop** is the rig (agent + OBS) on home or venue Wi-Fi. The
 **phone** is the talent on **mobile data, Wi-Fi off**.
 
-**Until the relay is redeployed**, use the relay harness locally with a
+**To test a relay change before deploying it**, use the relay harness locally with a
 throwaway HTTPS tunnel in front of it. The tunnel exposes only the **relay**: a
 dumb pipe that needs a seat cookie for everything. The agent stays
 loopback-only and dials out to it, exactly as it does to `room.cleartoair.com`.
@@ -233,6 +233,6 @@ loopback-only and dials out to it, exactly as it does to `room.cleartoair.com`.
 12. Close the seat in Setup: the phone shows LINK CLOSED and OBS clears.
 13. Teardown: Ctrl+C cloudflared and `relay:dev`, stop the test agent, start the normal one.
 
-**After the relay is redeployed**, skip steps 2-4: the normal agent's Remote seats on `room.cleartoair.com` makes the same link.
+**On the hosted relay**, skip steps 2-4: the normal agent's Remote seats on `room.cleartoair.com` makes the same link.
 
 Record for each run: carrier and network, candidate pair types, RTT, time to first picture, the resolution reached, packet loss, glass-to-glass delay, and whether OBS played audio with no click.

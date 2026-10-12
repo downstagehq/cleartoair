@@ -193,11 +193,14 @@ storage durability across a restart, and the real 1 MiB frame cap.
 
 ## Not verified
 
-- **Nothing has run on Cloudflare.** The relay has never been deployed. The
-  Durable Object's hibernation and its storage surviving an eviction are
-  Cloudflare behaviours the Node harness cannot stand in for.
-- No real internet hop: every byte of every test crossed loopback, so nothing is
-  known about latency or a flaky venue uplink.
+- **Cloudflare, partly.** The relay runs at room.cleartoair.com (deployed 11 October 2026,
+  redeployed 12 October with the talent routes). Over the internet: a rig and a producer on
+  different connections, the door, changes both ways, settings refused, the password
+  redacted; a talent link opening over HTTPS with real media. Not yet seen: the Durable
+  Object hibernating and its storage surviving an eviction, and a real show with OBS
+  attached through it.
+- Latency and a flaky venue uplink are still unknown: the internet tests ran on one
+  home connection.
 - Thumbnails were never fetched through the tunnel with OBS running, so the
   480px JPEG budget is arithmetic, not a measurement.
 
@@ -209,9 +212,8 @@ storage durability across a restart, and the real 1 MiB frame cap.
 - A desk seat has no voice. A caster can now come in over the relay (talent
   seats, above), but a remote producer is still driving the desk silently, and
   the talent page has no return feed (IFB) from the desk.
-- Talent seats need the relay redeployed with this `relay/src` before they work
-  on room.cleartoair.com (the tunnelled `/overlays/talent/` path, the
-  `/talent/signaling` socket and the `talent` role are all new there).
+- Talent seats work on room.cleartoair.com since the 12 October redeploy. A phone on
+  mobile data, a strict NAT and a TURN server are still untested.
 - The seat list is not in the hosted room, by design — but a producer cannot
   currently see who else is on the desk with them.
 - Hosted thumbnails are a poll, not a stream. If the uplink is tight this is the

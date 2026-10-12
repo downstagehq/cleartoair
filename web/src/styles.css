@@ -534,6 +534,9 @@
   .slate {
     aspect-ratio: 16 / 9;
     width: 100%;
+    /* The Air column scrolls; a thumbnail never gives up height to make room (on a 900 px
+       tall window it was squashed to a 74 px strip with the graphics cropped away). */
+    flex-shrink: 0;
     border-radius: var(--r-1);
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.025) 50%, rgba(255, 255, 255, 0.025) 75%, transparent 75%) 0 0 / 16px 16px,
@@ -550,6 +553,8 @@
     height: 100%;
     object-fit: cover;
     display: block;
+    /* OBS hands back transparency where nothing is drawn (an empty game capture); program is black there. */
+    background: #000;
   }
   .chip {
     position: absolute;

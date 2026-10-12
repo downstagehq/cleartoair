@@ -14,8 +14,8 @@
 // What it does:
 //   * starts runtime\node.exe app\agent\src\index.js hidden, restarts it if it dies
 //   * waits for http://127.0.0.1:7700/healthz, then opens the control room
-//   * tray icon: green = CLEAR TO AIR, amber = agent up with preflight faults,
-//     red = agent down; menu: open, restart, check for updates, open folder, quit
+//   * tray icon: green = CLEAR TO AIR, amber = clear with warnings, red = preflight faults
+//     or agent down; menu: open, restart, check for updates, open folder, quit
 //   * updates: asks the agent (/api/update) which reads the release manifest;
 //     verifies the manifest's signature itself against the public key compiled in
 //     (ReleaseKey.cs, see ManifestCheck below) BEFORE downloading anything, so a

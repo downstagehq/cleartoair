@@ -174,7 +174,7 @@ export function install({ config } = {}) {
       'Add these launch options to Apex Legends (Steam > Properties > Launch Options, or EA app > Advanced launch options):',
       `   +cl_liveapi_enabled 1 +cl_liveapi_ws_servers "ws://127.0.0.1:${port}" +cl_liveapi_use_protobuf 0`,
       'Start the apexlive adapter BEFORE launching the game; the game connects to the agent (we are the server).',
-      'Run it on the observer PC (or the PC hosting the private match). Custom lobbies with observer slot give the full feed.',
+      'Run the observer client on this PC: the LiveAPI receiver listens here only. Custom lobbies with an observer slot give the full feed.',
       'LiveAPI is an official Respawn/EA feature — no anti-cheat concern.',
     ].join('\n'),
   };

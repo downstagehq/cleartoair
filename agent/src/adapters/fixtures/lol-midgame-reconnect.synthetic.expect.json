@@ -1,0 +1,57 @@
+{
+  "adapter": "lolclient",
+  "payloads": 17,
+  "final": {
+    "phase": "live",
+    "mapName": "Summoner's Rift",
+    "scoreA": 0,
+    "scoreB": 1,
+    "sideA": "RED",
+    "sideB": "BLUE",
+    "names.A": "Red",
+    "names.B": "Blue",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0,
+    "extra.gameNo": 2,
+    "events.length": 4
+  },
+  "events": [
+    "kill",
+    "baron",
+    "inhib",
+    "match_end",
+    "match_start",
+    "info",
+    "first_blood"
+  ],
+  "problems": 0,
+  "frames": {
+    "0": {
+      "events.length": 0,
+      "scoreA": 13,
+      "scoreB": 15,
+      "extra.gameNo": 1,
+      "extra.joinedAt": 1080,
+      "extra.objectives.BLUE.dragons": 1,
+      "extra.objectives.BLUE.turrets": 1
+    },
+    "7": {
+      "events.length": 1,
+      "clock": "18:07"
+    },
+    "8": {
+      "events.length": 3,
+      "events.1.text": "Kestrel killed Baron Nashor"
+    },
+    "13": {
+      "extra.gameNo": 2,
+      "scoreA": 0,
+      "scoreB": 0,
+      "events.length": 1,
+      "events.0.type": "match_start"
+    }
+  },
+  "why": "Joined at 18:00 (old events counted, not announced), a 45 s client restart (nothing re-announced, the baron in the gap announced once), then game 2 in the same recording (new game: clock and scores restart, its events are not swallowed)."
+}

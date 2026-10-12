@@ -45,9 +45,11 @@ Also exported: `prettyWeapon('weapon_ak47') -> 'AK-47'`, `fmtClock(seconds)`, `p
 | `manual` | all | none | – | nothing | never (scores come from the Match tab) |
 | `startgg` | all | GraphQL client (one-shot) | – | token in `settings.startggToken` | never (not live) |
 
-All servers bind `127.0.0.1`. `resolveOpts().host()` would honour `config.gsiBind` / `config.apexBind`, but
-nothing in `config.js` sets them yet, so **the observer / spectating client must run on the same PC as the
-agent for now**. The install texts say so and no longer promise a LAN setup.
+All servers bind `127.0.0.1` by default. Since 0.3.3 the two GSI receivers (CS2 and Dota 2) can also listen
+on the LAN for an observer PC: Data tab → Observer PC (`settings.gsiLan`, `_lan.js`). Only the exact
+addresses listed there are admitted (no ranges), the GSI token is still checked, and refused senders show
+in preflight. Every other receiver - Apex's LiveAPI, Rocket League's Stats API, League's poller - stays on
+this PC only, so those games must run on the same PC as the agent.
 
 GSI token (`_gsi.js resolveToken`): the first non-empty of `settings.gsiToken` → `config.settings.gsiToken` →
 `config.gsiToken`, else the legacy `'cta'`. An empty setting never disables auth. `install()` prints the

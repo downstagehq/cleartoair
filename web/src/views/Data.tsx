@@ -534,7 +534,7 @@ export function Data() {
             <Field label="Event slug">
               <Input mono value={gg.slug} onChange={(e) => setGg({ ...gg, slug: e.target.value })} placeholder="tournament/example-event/event/valorant" />
             </Field>
-            <Field label="API token" hint="Held only for this import, never saved to state.">
+            <Field label="API token" hint="Used for the import. Typed here it is not saved; a token already in settings.startggToken is filled in.">
               <Input mono type="password" value={gg.token} onChange={(e) => setGg({ ...gg, token: e.target.value })} placeholder="start.gg personal token" autoComplete="off" />
             </Field>
             <div>

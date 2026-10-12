@@ -221,6 +221,9 @@
    * ticker and corner tag, and the scorebug sat on top of the standby title. The bug follows
    * show.bug everywhere else. */
   function standbyScene(program) { return /^(01|06|08)(?!\d)/.test(String(program || '').trim()); }
+  /* 02 DESK carries the in-game layer too, and the corner tag sat on top of the right-hand
+   * nameplate. The tag follows show.corner everywhere else. */
+  function deskScene(program) { return /^02(?!\d)/.test(String(program || '').trim()); }
 
   function finalResult(s) {
     var r = s && s.live && s.live.result;
@@ -458,7 +461,7 @@
       show($('ticker'), !!sh.ticker);
 
       html($('corner'), '<div class="ev">' + esc(ev.name || '') + '</div><div class="sub">' + (ev.platform ? '<span class="plat">' + esc(ev.platform) + '</span>' : '') + '<span class="tag">' + esc(ev.hashtag || '') + '</span></div>');
-      show($('corner'), !!sh.corner);
+      show($('corner'), !!sh.corner && !deskScene(CTA.program));
 
       var to = sh.timeout;
       if (to) {
@@ -1012,5 +1015,5 @@
     });
   }
 
-  CTA.render = { ingame: ingame, cards: cards, standby: standby, desk: desk, BUG: BUG, CARD: CARD, mapTile: mapTile, html: html, objectiveRows: objectiveRows, roundHistory: roundHistory, playerStat: playerStat, liveScoreboardRows: liveScoreboardRows, standbyScene: standbyScene };
+  CTA.render = { ingame: ingame, cards: cards, standby: standby, desk: desk, BUG: BUG, CARD: CARD, mapTile: mapTile, html: html, objectiveRows: objectiveRows, roundHistory: roundHistory, playerStat: playerStat, liveScoreboardRows: liveScoreboardRows, standbyScene: standbyScene, deskScene: deskScene };
 })(window);

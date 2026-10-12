@@ -12,8 +12,10 @@
 //                                                    CS2/Dota POST to :7701/:7702, Rocket League
 //                                                    serves the Stats API on :49123 (start the
 //                                                    rlstats adapter, it dials in), Apex connects
-//                                                    to the adapter's :7777. League polls an HTTPS
-//                                                    client, which this tool does not fake.
+//                                                    to the adapter's :7777. League polls the game
+//                                                    client, so this serves the recorded polls on
+//                                                    http://127.0.0.1:2998 (--port) and the agent
+//                                                    must run with CTA_LOL_REPLAY_URL set to that.
 //
 // --live never touches state: it only speaks to the adapter's port, like the game would.
 // The GSI token in a capture is "[removed]"; --live puts the agent's current token back
@@ -30,8 +32,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const opt = (n, d) => { const i = args.indexOf(n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-const file = args.find((a) => !a.startsWith('--') && !['--speed', '--token', '--data-dir', '--state'].includes(args[args.indexOf(a) - 1]));
-if (!file) { console.error('usage: node tools/replay.mjs <capture.jsonl> [--expect] [--live [--speed N] [--token T] [--loop]] [--state state.json]'); process.exit(2); }
+const file = args.find((a) => !a.startsWith('--') && !['--speed', '--token', '--data-dir', '--state', '--port'].includes(args[args.indexOf(a) - 1]));
+if (!file) { console.error('usage: node tools/replay.mjs <capture.jsonl> [--expect] [--live [--speed N] [--token T] [--port P] [--loop]] [--state state.json]'); process.exit(2); }
 
 const cap = parseCapture(fs.readFileSync(file, 'utf8'));
 for (const e of cap.errors) console.warn(`  ! line ${e.line}: ${e.message}`);
@@ -137,6 +139,38 @@ async function live() {
     return;
   }
 
-  console.error(`--live does not support ${id} (League's client is polled over HTTPS; replay it without --live)`);
+  if (id === 'lolclient') {
+    // The adapter polls; here we are the game client. Plain HTTP on loopback, so the agent must be
+    // started with CTA_LOL_REPLAY_URL pointing here (the adapter accepts nothing but http://127.0.0.1).
+    // Each recorded poll is served from its recorded moment until the next; where the recording has a
+    // hole (the client was gone), the stand-in answers 503 for it, so the agent sees the drop-out too.
+    const port = Number(opt('--port', '2998'));
+    const t0 = list[0].ms ?? 0;
+    const at = list.map((p, i) => ({ ms: (p.ms ?? t0 + i * 1000) - t0, payload: p.payload }));
+    at.forEach((p, i) => { p.wall = i ? at[i - 1].wall + Math.min(10_000, p.ms - at[i - 1].ms) / speed : 0; });
+    const cycle = at.at(-1).wall + 1000 / speed;
+    let start = null, shown = -1;
+    const srv = http.createServer((req, res) => {
+      if (!/^\/liveclientdata\/allgamedata\/?(\?|$)/.test(req.url)) { res.writeHead(404); res.end(); return; }
+      start ??= Date.now();
+      const el = flag('--loop') ? (Date.now() - start) % cycle : Date.now() - start;
+      let i = at.findLastIndex((p) => p.wall <= el);
+      if (i < 0) i = 0;
+      const gap = i + 1 < at.length && at[i + 1].ms - at[i].ms > 3000;
+      if (gap && el - at[i].wall > 1000 / speed) { res.writeHead(503); res.end(); return; }
+      if (i !== shown) { shown = i; process.stdout.write(`\r  #${i + 1}/${at.length}${i === at.length - 1 && !flag('--loop') ? ' (the last poll is served until Ctrl+C)' : ''}`); }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(at[i].payload));
+    });
+    srv.on('error', (e) => { console.error(`cannot listen on :${port}: ${e.code}`); process.exit(1); });
+    srv.listen(port, '127.0.0.1', () => {
+      console.log(`  serving the recorded allgamedata on http://127.0.0.1:${port}/liveclientdata/allgamedata`);
+      console.log(`  start the agent with CTA_LOL_REPLAY_URL=http://127.0.0.1:${port} and the League adapter in the Data tab;`);
+      console.log('  the clock starts at its first poll');
+    });
+    return;
+  }
+
+  console.error(`--live does not support ${id}`);
   process.exit(2);
 }

@@ -3,6 +3,42 @@
 Newest first. One section per release; the notes for `gh release create` come from here
 (see [RELEASE.md](RELEASE.md), step 1).
 
+## 0.3.5 - League hardened, talent links reach OBS
+
+**Upgrading:** nothing to do. To use talent links, see the first point.
+
+- **Talent links into OBS, end to end.** Setup → Remote seats → Talent camera links now has
+  a **Talent sources in OBS** switch: VDO.Ninja (the default) or CTA Studio. Until now the
+  CTA Studio sources the links feed could only be chosen by editing the settings file. Switch
+  it, then rebuild the OBS collection (OBS closed, **Hold to install**). Tested with a real
+  OBS 32.2.2 and room.cleartoair.com: a link opened in a phone-sized browser on the relay
+  put its camera on 02 · DESK. The camera was a browser test camera on this PC; a real
+  phone on mobile data is still to do.
+- **League of Legends, checked against Riot's own samples.** Three new recordings: a full
+  game from a player's client, a spectator client with Riot IDs, and joining mid-game with
+  a client restart and a second game. They turned up eight fixes:
+  - Turrets and minions are named in the feed ("Blue turret killed Ember", not
+    "Turret_T1_L_03_A killed Ember").
+  - An inhibitor taken by minions now counts.
+  - The end of the game says which side won ("Game over — Blue side wins") on a player's
+    client; a spectator's client says "Game over", because only a player's client knows.
+  - Two players with the same name are told apart by their tag.
+  - Starting Clear to Air mid-game no longer floods the feed with every earlier event.
+  - A second game in the same session keeps its events.
+  - Riot's sample gives every event the same ID; repeats are now recognised by content.
+  - A client restart no longer resets what was already announced.
+  - From source, `npm run replay -- <file> --live` now plays League recordings too, into an
+    agent started with `CTA_LOL_REPLAY_URL=http://127.0.0.1:2998` (the tool prints the line).
+    The agent accepts only a plain http address on this PC there; without it nothing changes.
+- **Program and preview thumbnails were squashed.** On a window about 900 px tall the Air
+  column shrank them to a strip and the graphics were cropped away. They keep 16:9 now (the
+  column scrolls), and an empty game capture shows as black, not as "no picture".
+- **No corner tag over the desk.** On 02 · DESK the event's corner tag covered the right-hand
+  nameplate; it hides on that scene.
+- Wording: preflight's fixes name the buttons as they read on screen (**Hold for new event**,
+  **Run now**); the talent page no longer promises "zero audio drop"; Apex's setup says the
+  observer client runs on this PC (its receiver is local only).
+
 ## 0.3.4 - the replay cuts back by itself
 
 **Upgrading:** nothing to do. It is on by default; switch it off under Replay in the Air column.

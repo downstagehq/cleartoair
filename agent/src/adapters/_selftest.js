@@ -287,17 +287,75 @@ for (const name of ADAPTERS) {
       'install ini: [TAGame.MatchStatsExporter_TA] PacketSendRate=30 Port=49123, no bEnabled');
   }
   if (name === 'lolclient') {
+    // The adapter meets the game at 0:05 (so its events are news, not history), then the 15:13 poll.
+    inst.parse({ ...LOL_DATA, gameData: { ...LOL_DATA.gameData, gameTime: 5 }, events: { Events: LOL_DATA.events.Events.slice(0, 1) } });
     const l = normalize(inst.parse(LOL_DATA), state);
     ok(l.clock === '15:13' && l.scoreA === 4 && l.scoreB === 1 && l.players[0].champion === 'Ahri' && l.players[1].alive === false, `allgamedata parsed (${l.clock} ${l.scoreA}-${l.scoreB})`);
     ok(l.events.length === 4 && l.extra.objectives.A === undefined && l.extra.objectives.BLUE.dragons === 1 && l.extra.objectives.BLUE.turrets === 1, `events + objectives (${l.events.length} events, blue dragons=${l.extra.objectives.BLUE.dragons})`);
     const again = inst.parse(LOL_DATA);
-    ok(again.events.length === 4, 'events deduped by EventID on re-poll');
+    ok(again.events.length === 4, 'events not announced again on re-poll');
     let lthrew = ''; let empty;
     try { empty = mod.parseAllGameData({ gameData: { gameTime: 30 }, events: { Events: [{ EventID: 1, EventName: 'GameStart', EventTime: 0 }] } }); mod.parseAllGameData(null); mod.parseAllGameData({ allPlayers: null, events: null }); } catch (e) { lthrew = e.message; }
     ok(!lthrew && empty?.players.length === 0 && empty?.phase === 'live', `missing allPlayers does not throw${lthrew ? ': ' + lthrew : ''}`);
     const legacy = mod.parseAllGameData({ gameData: { gameTime: 400 }, allPlayers: [{ summonerName: 'OldName', riotIdGameName: 'Zephyr', team: 'ORDER', scores: { kills: 1 } }, { riotId: 'Rift#EUW', team: 'CHAOS', scores: {} }],
       events: { Events: [{ EventID: 11, EventName: 'ChampionKill', EventTime: 399, KillerName: 'OldName', VictimName: 'Rift#EUW', Assisters: [] }, { EventID: 12, EventName: 'DragonKill', EventTime: 400, KillerName: 'OldName', DragonType: 'Fire', Stolen: 'False' }] } });
     ok(legacy.events.at(-2)?.text === 'Zephyr killed Rift' && legacy.extra.objectives.BLUE.dragons === 1, `event names resolve summonerName / Riot ID to riotIdGameName (${legacy.events.at(-2)?.text})`);
+    // Riot's own event sample gives every event EventID 0: still one announcement per event, none on re-poll.
+    const zctx = { events: [], seen: new Set() };
+    const zero = { gameData: { gameTime: 8 }, allPlayers: LOL_DATA.allPlayers, events: { Events: [{ EventID: 0, EventName: 'GameStart', EventTime: 0 }, { EventID: 0, EventName: 'MinionsSpawning', EventTime: 0 }, { EventID: 0, EventName: 'Ace', EventTime: 7.5, Acer: 'Zephyr', AcingTeam: 'ORDER' }] } };
+    const z1 = mod.parseAllGameData(zero, zctx), z2 = mod.parseAllGameData({ ...zero, gameData: { gameTime: 9 } }, zctx);
+    ok(z1.events.length === 3 && z2.events.length === 3, `events with Riot's sample EventID 0 are told apart by content (${z1.events.length}, then ${z2.events.length})`);
+    // Mid-game join: what is already in the list is history (counted, not announced); a new event is news.
+    const jctx = { events: [], seen: new Set() };
+    const j1 = mod.parseAllGameData(LOL_DATA, jctx);
+    const j2 = mod.parseAllGameData({ ...LOL_DATA, gameData: { ...LOL_DATA.gameData, gameTime: 915 }, events: { Events: [...LOL_DATA.events.Events, { EventID: 9, EventName: 'BaronKill', EventTime: 914.2, KillerName: 'Zephyr#EUW', Stolen: 'True' }] } }, jctx);
+    ok(j1.events.length === 0 && j1.extra.objectives.BLUE.dragons === 1 && j1.extra.joinedAt === 913 && j2.events.length === 1 && j2.events[0].text === 'Zephyr killed Baron Nashor (stolen!)',
+      `joined at 15:13: history counted, not announced (${j1.events.length} events), then "${j2.events[0]?.text}"`);
+    // A new game: the same ten with the clock back at zero (a remake), or other champions.
+    const j3 = mod.parseAllGameData({ ...LOL_DATA, gameData: { ...LOL_DATA.gameData, gameTime: 2 }, events: { Events: [{ EventID: 0, EventName: 'GameStart', EventTime: 0.04 }] } }, jctx);
+    const j4 = mod.parseAllGameData({ ...LOL_DATA, allPlayers: [{ ...LOL_DATA.allPlayers[0], championName: 'Lux' }, LOL_DATA.allPlayers[1]], gameData: { ...LOL_DATA.gameData, gameTime: 3 }, events: { Events: [{ EventID: 0, EventName: 'GameStart', EventTime: 0.02 }] } }, jctx);
+    ok(j2.extra.gameNo === 1 && j3.extra.gameNo === 2 && j3.events.map(e => e.type).join() === 'match_start' && j4.extra.gameNo === 3 && j4.events.length === 1,
+      `clock back to 0:02 = game 2, other champions = game 3, each starting with its own GameStart (${j3.extra.gameNo}, ${j4.extra.gameNo})`);
+    // GameEnd's Result is the active player's: a red player's "Lose" means blue won; a spectator names nobody.
+    const end = (activePlayer, Result) => mod.parseAllGameData({ activePlayer, allPlayers: LOL_DATA.allPlayers, gameData: { gameTime: 1800 }, events: { Events: [{ EventID: 0, EventName: 'GameEnd', EventTime: 1799.5, Result }] } });
+    const lose = end({ riotIdGameName: 'Rift', summonerName: 'Rift#EUW' }, 'Lose'), spec = end({ error: "Spectator mode doesn't currently support this feature" }, 'Win');
+    ok(lose.extra.winner === 'Blue' && lose.events.at(-1).text === 'Game over — Blue side wins' && spec.extra.winner === undefined && spec.events.at(-1).text === 'Game over' && spec.phase === 'gameover',
+      `GameEnd: red player's "Lose" -> ${lose.extra.winner} wins; spectator -> "${spec.events.at(-1).text}"`);
+    // Two players share a game name: shown with their tags, and the bare name points at neither.
+    const twins = mod.parseAllGameData({ gameData: { gameTime: 300 }, allPlayers: [{ riotIdGameName: 'Nova', riotIdTagLine: 'EUW', riotId: 'Nova#EUW', team: 'ORDER', scores: {} }, { riotIdGameName: 'Nova', riotIdTagLine: 'KR1', riotId: 'Nova#KR1', team: 'CHAOS', scores: {} }],
+      events: { Events: [{ EventID: 1, EventName: 'ChampionKill', EventTime: 299, KillerName: 'Nova#KR1', VictimName: 'Nova#EUW', Assisters: [] }, { EventID: 2, EventName: 'DragonKill', EventTime: 299.5, KillerName: 'Nova', DragonType: 'Fire', Stolen: 'False' }] } });
+    ok(twins.players.map(p => p.name).join() === 'Nova#EUW,Nova#KR1' && twins.events[0].text === 'Nova#KR1 killed Nova#EUW' && twins.extra.objectives.BLUE.dragons + twins.extra.objectives.RED.dragons === 0,
+      `same game name on both teams -> ${twins.players.map(p => p.name).join(' / ')}; an ambiguous "Nova" dragon is credited to nobody`);
+    // Turrets, minions and monsters on air in words; buildings counted by their own name, whoever took them.
+    const units = mod.parseAllGameData({ gameData: { gameTime: 1200 }, allPlayers: LOL_DATA.allPlayers, events: { Events: [
+      { EventID: 1, EventName: 'ChampionKill', EventTime: 1195, KillerName: 'Turret_T2_C_05_A', VictimName: 'Zephyr', Assisters: [] },
+      { EventID: 2, EventName: 'InhibKilled', EventTime: 1196, InhibKilled: 'Barracks_T1_L1', KillerName: 'Minion_T200L0S40N0300', Assisters: [] },
+      { EventID: 3, EventName: 'ChampionKill', EventTime: 1197, KillerName: 'SRU_Baron12.1.1', VictimName: 'Rift', Assisters: [] },
+      { EventID: 4, EventName: 'InhibRespawningSoon', EventTime: 1198, InhibRespawningSoon: 'Barracks_T1_L1' }] } });
+    ok(units.events.map(e => e.text).join(' | ') === 'Red turret killed Zephyr | Red minions destroyed an inhibitor | Baron Nashor killed Rift' && units.extra.objectives.RED.inhibs === 1,
+      `non-champion killers named (${units.events.map(e => e.text).join(' | ')}), minion inhib counted for red`);
+    // The recorded-game override (tools/replay.mjs --live) is http on loopback only.
+    ok(mod.replayBaseUrl('http://127.0.0.1:7781/') === 'http://127.0.0.1:7781' && mod.replayBaseUrl('http://localhost:7781') === 'http://localhost:7781' && mod.replayBaseUrl('https://127.0.0.1:2999') === null
+      && mod.replayBaseUrl('http://192.168.1.20:2999') === null && mod.replayBaseUrl('http://example.com') === null && mod.replayBaseUrl('not a url') === null && mod.replayBaseUrl('') === null,
+      'CTA_LOL_REPLAY_URL: only http://127.0.0.1 / localhost is accepted');
+    // The real poller against a stand-in client on 127.0.0.1:7782: it answers, drops out (a client
+    // restart: HTTP 503), comes back with one more event. Nothing is announced twice.
+    let answer = { ...LOL_DATA, gameData: { ...LOL_DATA.gameData, gameTime: 5 }, events: { Events: LOL_DATA.events.Events.slice(0, 1) } };
+    const fake = http.createServer((req, res) => { if (!answer) { res.writeHead(503); res.end(); return; } res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(answer)); });
+    await new Promise((r) => fake.listen(7782, '127.0.0.1', r));
+    const seenLive = [];
+    const poller = mod.create({ config: { lolReplayUrl: 'http://127.0.0.1:7782' }, emit: (lv) => seenLive.push(lv), log: () => {}, getState });
+    await poller.start(); await sleep(400);
+    answer = LOL_DATA; await sleep(1100);
+    answer = null; await sleep(1100);
+    const dropped = seenLive.at(-1)?.connected === false;
+    answer = { ...LOL_DATA, gameData: { ...LOL_DATA.gameData, gameTime: 960 }, events: { Events: [...LOL_DATA.events.Events, { EventID: 9, EventName: 'HeraldKill', EventTime: 950, KillerName: 'Rift', Stolen: 'False' }] } };
+    await sleep(2300);
+    const back = seenLive.at(-1), detail = poller.status().detail;
+    await poller.stop(); await new Promise((r) => fake.close(r));
+    const texts = back?.events?.map(e => e.text) || [];
+    ok(dropped && back?.connected && /^REPLAY polling ok/.test(detail) && texts.length === 5 && new Set(texts).size === 5 && texts.at(-1) === 'Rift killed the Rift Herald',
+      `client restart mid-game: ${texts.length} events after reconnect, none twice, the one from the gap announced (${texts.at(-1)})`);
   }
   if (name === 'apexlive') {
     const c = new WebSocket('ws://127.0.0.1:7777');

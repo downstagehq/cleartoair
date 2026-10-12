@@ -263,12 +263,203 @@ function lol({ name }) {
   return w.save();
 }
 
-const made = {
-  'cs2-scrim-halftime.synthetic': cs2({ name: 'cs2-scrim-halftime.synthetic' }),
-  'cs2-local-bots.synthetic': cs2({ name: 'cs2-local-bots.synthetic', botNames: true, seed: 11 }),
-  'dota2-league-spectator.synthetic': dota({ name: 'dota2-league-spectator.synthetic' }),
-  'rocketleague-stats-api-3v3.synthetic': rocketLeague({ name: 'rocketleague-stats-api-3v3.synthetic' }),
-  'apex-liveapi-trios.synthetic': apex({ name: 'apex-liveapi-trios.synthetic' }),
-  'lol-spectator.synthetic': lol({ name: 'lol-spectator.synthetic' }),
-};
-for (const [n, c] of Object.entries(made)) console.log(`${n}.jsonl  ${c} payloads`);
+// ---- League: the harder cases, from Riot's documented allgamedata / eventdata samples -----------
+// Riot's samples (developer.riotgames.com/docs/lol, liveclientdata_sample.json + _events.json):
+// EventTime / gameTime are floats, Stolen is the STRING "False"/"True", team is "ORDER"/"CHAOS",
+// Ace names the "Acer" and "AcingTeam", turrets/inhibs are named Turret_T2_L_03_A / Barracks_T2_R1
+// (T1 = blue's building). Since patch 14.10 players also carry riotId / riotIdGameName /
+// riotIdTagLine, and summonerName became "Name#TAG" (eventdata kept using it, Riot dev-relations
+// #857). GameEnd's Result ("Win"/"Lose") and the InhibRespawn*, Horde and Atakhan events are not in
+// Riot's samples: their shapes here are the commonly reported ones, an assumption a real capture
+// must confirm.
+const LOL_CHAMPS = ['Ornn', 'Vi', 'Ahri', 'Jinx', 'Thresh', 'Gnar', 'Lee Sin', 'Syndra', 'Kai\'Sa', 'Nautilus'];
+const LOL_POS = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+
+/** allPlayers for ten { game, tag, team, champ, summonerName? } with scores counted from the events so far. */
+function lolPlayers(roster, evs, t) {
+  const ids = (p) => [p.summonerName, `${p.game}#${p.tag}`, p.game].filter(Boolean);
+  const is = (p, n) => ids(p).includes(n);
+  return roster.map((p, i) => {
+    const kills = evs.filter((ev) => ev.EventName === 'ChampionKill' && is(p, ev.KillerName)).length;
+    const deaths = evs.filter((ev) => ev.EventName === 'ChampionKill' && is(p, ev.VictimName)).length;
+    const assists = evs.filter((ev) => ev.EventName === 'ChampionKill' && (ev.Assisters || []).some((a) => is(p, a))).length;
+    const lastDeath = evs.filter((ev) => ev.EventName === 'ChampionKill' && is(p, ev.VictimName)).at(-1);
+    const respawn = lastDeath ? Math.max(0, lastDeath.EventTime + 30 - t) : 0;
+    const out = {
+      championName: p.champ, isBot: false, isDead: respawn > 0, items: t > 300 ? [{ canUse: false, consumable: false, count: 1, displayName: 'Doran\'s Blade', itemID: 1055, price: 450, rawDescription: 'GeneratedTip_Item_1055_Description', rawDisplayName: 'Item_1055_Name', slot: 0 }] : [],
+      level: Math.min(18, 1 + Math.floor(t / 110)), position: LOL_POS[i % 5], rawChampionName: `game_character_displayname_${p.champ.replace(/\W/g, '')}`, respawnTimer: respawn,
+      runes: { keystone: { displayName: 'Conqueror', id: 8010 }, primaryRuneTree: { displayName: 'Precision', id: 8000 }, secondaryRuneTree: { displayName: 'Resolve', id: 8400 } },
+      scores: { assists, creepScore: Math.floor(t / 9) + i, deaths, kills, wardScore: Math.round(t / 60 * 100) / 100 },
+      skinID: 0, summonerSpells: { summonerSpellOne: { displayName: 'Flash' }, summonerSpellTwo: { displayName: i % 5 === 1 ? 'Smite' : 'Teleport' } },
+      team: p.team, riotId: `${p.game}#${p.tag}`, riotIdGameName: p.game, riotIdTagLine: p.tag,
+    };
+    if (p.summonerName !== undefined) out.summonerName = p.summonerName;
+    return out;
+  });
+}
+const lolGameData = (t) => ({ gameMode: 'CLASSIC', gameTime: t, mapName: 'Map11', mapNumber: 11, mapTerrain: t > 900 ? 'Infernal' : 'Default' });
+
+// A whole game from a PLAYER's client (Rift, red side), so GameEnd's Result is Rift's: "Lose" means
+// blue won. Grubs, four dragon types, a stolen baron, Atakhan, an execute by a turret, a turret and
+// an inhibitor taken by minions, a multikill, an ace, an inhib respawn warning, then the nexus.
+function lolFullGame({ name }) {
+  const w = writer(name, 'lolclient', 'lol', 'League Live Client Data allgamedata (player client)');
+  const roster = [...ALPHA, ...BRAVO].map((g, i) => ({ game: g, tag: 'CUP', team: i < 5 ? 'ORDER' : 'CHAOS', champ: LOL_CHAMPS[i], summonerName: `${g}#CUP` }));
+  const N = (n) => `${n}#CUP`; // eventdata names players by summonerName, "Name#TAG" since 14.10
+  const raw = [
+    ['GameStart', 0.0412], ['MinionsSpawning', 65.0103],
+    ['FirstBlood', 185.6194, { Recipient: N('Kestrel') }],
+    ['ChampionKill', 185.6194, { KillerName: N('Kestrel'), VictimName: N('Nomad'), Assisters: [N('Onyx')] }],
+    ['HordeKill', 331.2501, { KillerName: N('Kestrel'), Stolen: 'False', Assisters: [] }],
+    ['HordeKill', 333.0177, { KillerName: N('Kestrel'), Stolen: 'False', Assisters: [] }],
+    ['HordeKill', 334.8822, { KillerName: N('Kestrel'), Stolen: 'False', Assisters: [N('Onyx')] }],
+    ['DragonKill', 420.5310, { DragonType: 'Fire', Stolen: 'False', KillerName: N('Kestrel'), Assisters: [N('Talon'), N('Ronin')] }],
+    ['ChampionKill', 512.3307, { KillerName: 'Turret_T1_L_03_A', VictimName: N('Ember'), Assisters: [] }],
+    ['TurretKilled', 640.1145, { TurretKilled: 'Turret_T2_L_03_A', KillerName: 'Minion_T100L1S12N0101', Assisters: [] }],
+    ['FirstBrick', 640.1145, { KillerName: 'Minion_T100L1S12N0101' }],
+    ['HeraldKill', 845.9014, { Stolen: 'False', KillerName: N('Ember'), Assisters: [N('Vex')] }],
+    ['DragonKill', 905.2276, { DragonType: 'Water', Stolen: 'False', KillerName: N('Ember'), Assisters: [] }],
+    ['ChampionKill', 1010.0021, { KillerName: N('Ember'), VictimName: N('Talon'), Assisters: [N('Vex')] }],
+    ['ChampionKill', 1012.4410, { KillerName: N('Zephyr'), VictimName: N('Ember'), Assisters: [] }],
+    ['ChampionKill', 1014.0995, { KillerName: N('Zephyr'), VictimName: N('Vex'), Assisters: [N('Kestrel')] }],
+    ['Multikill', 1014.0995, { KillerName: N('Zephyr'), KillStreak: 2 }],
+    ['AtakhanKill', 1215.5530, { KillerName: N('Kestrel'), Stolen: 'False', Assisters: [N('Zephyr'), N('Onyx')] }],
+    ['TurretKilled', 1260.7001, { TurretKilled: 'Turret_T2_C_05_A', KillerName: N('Onyx'), Assisters: [N('Talon')] }],
+    ['DragonKill', 1300.6638, { DragonType: 'Earth', Stolen: 'False', KillerName: N('Kestrel'), Assisters: [] }],
+    ['BaronKill', 1520.7714, { Stolen: 'True', KillerName: N('Rift'), Assisters: [] }],
+    ['ChampionKill', 1580.1003, { KillerName: N('Zephyr'), VictimName: N('Rift'), Assisters: [N('Kestrel')] }],
+    ['ChampionKill', 1582.9520, { KillerName: N('Onyx'), VictimName: N('Ember'), Assisters: [] }],
+    ['ChampionKill', 1585.3304, { KillerName: N('Talon'), VictimName: N('Nomad'), Assisters: [N('Ronin')] }],
+    ['ChampionKill', 1587.0118, { KillerName: N('Ronin'), VictimName: N('Vex'), Assisters: [N('Talon')] }],
+    ['ChampionKill', 1590.2457, { KillerName: N('Kestrel'), VictimName: N('Quill'), Assisters: [N('Zephyr')] }],
+    ['Ace', 1590.2457, { Acer: N('Kestrel'), AcingTeam: 'ORDER' }],
+    ['InhibKilled', 1610.4402, { InhibKilled: 'Barracks_T2_C1', KillerName: N('Onyx'), Assisters: [N('Zephyr')] }],
+    ['InhibKilled', 1625.0904, { InhibKilled: 'Barracks_T2_L1', KillerName: 'Minion_T100L0S40N0300', Assisters: [] }],
+    ['InhibRespawningSoon', 1880.4402, { InhibRespawningSoon: 'Barracks_T2_C1' }],
+    ['DragonKill', 1900.3318, { DragonType: 'Elder', Stolen: 'False', KillerName: N('Zephyr'), Assisters: [N('Kestrel')] }],
+    ['TurretKilled', 1940.2003, { TurretKilled: 'Turret_T2_C_01_A', KillerName: N('Zephyr'), Assisters: [] }],
+    ['TurretKilled', 1944.8117, { TurretKilled: 'Turret_T2_C_02_A', KillerName: N('Kestrel'), Assisters: [] }],
+    ['GameEnd', 1960.5126, { Result: 'Lose' }],
+  ];
+  const allEvents = raw.map(([EventName, EventTime, rest], EventID) => ({ EventID, EventName, EventTime, ...(rest || {}) }));
+  const activePlayer = { abilities: {}, championStats: { currentHealth: 1200, maxHealth: 1800 }, currentGold: 412.5, fullRunes: {}, level: 1,
+    riotId: 'Rift#CUP', riotIdGameName: 'Rift', riotIdTagLine: 'CUP', summonerName: 'Rift#CUP', teamRelativeColors: true };
+  const poll = (t) => {
+    const evs = allEvents.filter((ev) => ev.EventTime <= t);
+    return { activePlayer: { ...activePlayer, level: Math.min(18, 1 + Math.floor(t / 110)) }, allPlayers: lolPlayers(roster, evs, t), events: { Events: evs }, gameData: lolGameData(t) };
+  };
+  // One poll a second on the recording's clock while the game clock jumps (a time-lapse, like the
+  // spectator fixture): a recorded gap of more than a few seconds means the client was gone.
+  for (const t of [0.5, 66.0, 190.2, 340.0, 425.1, 515.0, 645.3, 850.0, 1015.8, 1220.4, 1305.0, 1525.6, 1592.0, 1626.3, 1885.0, 1901.2, 1946.0, 1960.6]) w.add(poll(t), 1000);
+  return w.save();
+}
+
+// A spectator client after the Riot ID change: activePlayer is an error object, then missing; some
+// players have no summonerName at all, one a different legacy summonerName, and the two "Nova"s
+// (one per team) are told apart only by their tags. Ends on GameEnd, whose Result a spectator
+// cannot attribute.
+function lolSpectatorRiotId({ name }) {
+  const w = writer(name, 'lolclient', 'lol', 'League Live Client Data allgamedata (spectator, Riot IDs)');
+  const roster = [
+    { game: 'Nova', tag: 'EUW', team: 'ORDER', champ: 'Ornn' },
+    { game: 'Kestrel', tag: 'CUP', team: 'ORDER', champ: 'Vi', summonerName: 'OldKestrel' },
+    { game: 'Sea Lion', tag: '0001', team: 'ORDER', champ: 'Ahri', summonerName: '' },
+    { game: 'Talon', tag: 'CUP', team: 'ORDER', champ: 'Jinx', summonerName: 'Talon#CUP' },
+    { game: 'Ronin', tag: 'CUP', team: 'ORDER', champ: 'Thresh' },
+    { game: 'Nova', tag: 'KR1', team: 'CHAOS', champ: 'Gnar' },
+    { game: 'Ember', tag: 'CUP', team: 'CHAOS', champ: 'Lee Sin', summonerName: 'Ember#CUP' },
+    { game: 'Nomad', tag: 'CUP', team: 'CHAOS', champ: 'Syndra' },
+    { game: 'Vex', tag: 'CUP', team: 'CHAOS', champ: 'Kai\'Sa', summonerName: '' },
+    { game: 'Quill', tag: 'CUP', team: 'CHAOS', champ: 'Nautilus' },
+  ];
+  const raw = [
+    ['GameStart', 0.0305], ['MinionsSpawning', 65.0088],
+    ['FirstBlood', 240.7731, { Recipient: 'Nova#KR1' }],
+    ['ChampionKill', 240.7731, { KillerName: 'Nova#KR1', VictimName: 'Nova#EUW', Assisters: ['Ember#CUP'] }],
+    ['DragonKill', 390.2219, { DragonType: 'Air', Stolen: 'False', KillerName: 'Nova#KR1', Assisters: [] }],
+    ['ChampionKill', 455.0063, { KillerName: 'OldKestrel', VictimName: 'Vex#CUP', Assisters: ['Sea Lion#0001'] }],
+    ['ChampionKill', 702.9180, { KillerName: 'Nova#EUW', VictimName: 'Nova#KR1', Assisters: ['Kestrel#CUP'] }],
+    ['DragonKill', 760.5521, { DragonType: 'Chemtech', Stolen: 'True', KillerName: 'Sea Lion#0001', Assisters: [] }],
+    ['TurretKilled', 910.1102, { TurretKilled: 'Turret_T1_R_03_A', KillerName: 'Ember#CUP', Assisters: ['Quill#CUP'] }],
+    ['ChampionKill', 1201.4407, { KillerName: 'SRU_Baron12.1.1', VictimName: 'Talon#CUP', Assisters: [] }],
+    ['BaronKill', 1205.0991, { Stolen: 'False', KillerName: 'Nova#KR1', Assisters: ['Ember#CUP', 'Vex#CUP'] }],
+    ['InhibKilled', 1540.3125, { InhibKilled: 'Barracks_T1_R1', KillerName: 'Nomad#CUP', Assisters: [] }],
+    ['TurretKilled', 1560.0402, { TurretKilled: 'Turret_T1_C_02_A', KillerName: 'Nova#KR1', Assisters: [] }],
+    ['TurretKilled', 1562.9935, { TurretKilled: 'Turret_T1_C_01_A', KillerName: 'Quill#CUP', Assisters: [] }],
+    ['GameEnd', 1580.7001, { Result: 'Win' }],
+  ];
+  const allEvents = raw.map(([EventName, EventTime, rest], EventID) => ({ EventID, EventName, EventTime, ...(rest || {}) }));
+  const poll = (t, i) => {
+    const evs = allEvents.filter((ev) => ev.EventTime <= t);
+    const body = { allPlayers: lolPlayers(roster, evs, t), events: { Events: evs }, gameData: lolGameData(t) };
+    // Riot's spectator answer for activePlayer, then (a later client) no activePlayer key at all.
+    return i < 4 ? { activePlayer: { error: 'Spectator mode doesn\'t currently support this feature' }, ...body } : body;
+  };
+  [1.2, 245.0, 395.8, 460.3, 705.0, 765.2, 915.9, 1206.5, 1545.0, 1563.4, 1580.9].forEach((t, i) => w.add(poll(t, i), 1000));
+  return w.save();
+}
+
+// The broadcast PC picks the game up at 18:00 (thirty events already in the list), the spectator
+// client restarts mid-game (no answer for ~45 s; it comes back repeating a stale gameTime, and a
+// baron fell meanwhile), the game ends, and game 2 of the series starts in the same recording with
+// the sides swapped and the clock back at zero.
+function lolMidgameReconnect({ name }) {
+  const w = writer(name, 'lolclient', 'lol', 'League Live Client Data allgamedata (spectator, mid-game join + client restart)');
+  const g1 = [...ALPHA, ...BRAVO].map((g, i) => ({ game: g, tag: 'CUP', team: i < 5 ? 'ORDER' : 'CHAOS', champ: LOL_CHAMPS[i], summonerName: `${g}#CUP` }));
+  const N = (n) => `${n}#CUP`;
+  const r = rng(29);
+  const raw = [['GameStart', 0.0388], ['MinionsSpawning', 65.0091]];
+  // 28 skirmish kills in the first 17 minutes, blue slightly ahead, plus two dragons and a turret.
+  for (let k = 0; k < 28; k++) {
+    const blue = r() < 0.55, kill = (blue ? ALPHA : BRAVO)[Math.floor(r() * 5)], vic = (blue ? BRAVO : ALPHA)[Math.floor(r() * 5)];
+    raw.push(['ChampionKill', Math.round((180 + k * 31 + r() * 9) * 10000) / 10000, { KillerName: N(kill), VictimName: N(vic), Assisters: [] }]);
+  }
+  raw.push(['DragonKill', 401.2208, { DragonType: 'Fire', Stolen: 'False', KillerName: N('Kestrel'), Assisters: [] }]);
+  raw.push(['DragonKill', 712.6604, { DragonType: 'Earth', Stolen: 'False', KillerName: N('Ember'), Assisters: [] }]);
+  raw.push(['TurretKilled', 940.0057, { TurretKilled: 'Turret_T2_L_03_A', KillerName: N('Zephyr'), Assisters: [] }]);
+  raw.sort((a, b) => a[1] - b[1]);
+  // After the join: one kill on screen, then the client restarts; a baron and a kill happen in the gap.
+  raw.push(['ChampionKill', 1084.5512, { KillerName: N('Onyx'), VictimName: N('Quill'), Assisters: [N('Talon')] }]);
+  raw.push(['BaronKill', 1121.3349, { Stolen: 'False', KillerName: N('Kestrel'), Assisters: [N('Zephyr')] }]);
+  raw.push(['ChampionKill', 1126.0071, { KillerName: N('Zephyr'), VictimName: N('Rift'), Assisters: [] }]);
+  raw.push(['InhibKilled', 1180.8813, { InhibKilled: 'Barracks_T2_L1', KillerName: N('Talon'), Assisters: [] }]);
+  raw.push(['GameEnd', 1240.2290, { Result: 'Win' }]);
+  const allEvents = raw.map(([EventName, EventTime, rest], EventID) => ({ EventID, EventName, EventTime, ...(rest || {}) }));
+  const spec = { activePlayer: { error: 'Spectator mode doesn\'t currently support this feature' } };
+  const poll = (roster, evs, t) => ({ ...spec, allPlayers: lolPlayers(roster, evs.filter((ev) => ev.EventTime <= t), t), events: { Events: evs.filter((ev) => ev.EventTime <= t) }, gameData: lolGameData(t) });
+  // Joined at 18:00.3; first poll of the session.
+  w.add(poll(g1, allEvents, 1080.3117), 1000);
+  for (const t of [1081.3, 1082.3, 1083.3, 1084.6, 1085.6, 1086.6]) w.add(poll(g1, allEvents, t), 1000);
+  // Client restart: 45 s without an answer. The first answer back repeats the last gameTime seen
+  // before it went (a stale snapshot), then the clock catches up with a baron and a kill already in.
+  w.add(poll(g1, allEvents, 1086.6), 45000);
+  w.add(poll(g1, allEvents, 1127.9), 1000);
+  w.add(poll(g1, allEvents, 1127.9), 1000); // repeated again: a one-second pause
+  for (const t of [1128.9, 1181.0, 1240.3]) w.add(poll(g1, allEvents, t), 1000);
+  // Game 2, same recording: sides swapped, other champions, the clock starts again.
+  const g2 = [...BRAVO, ...ALPHA].map((g, i) => ({ game: g, tag: 'CUP', team: i < 5 ? 'ORDER' : 'CHAOS', champ: [...LOL_CHAMPS].reverse()[i], summonerName: `${g}#CUP` }));
+  const g2Events = [
+    { EventID: 0, EventName: 'GameStart', EventTime: 0.0421 },
+    { EventID: 1, EventName: 'MinionsSpawning', EventTime: 65.0117 },
+    { EventID: 2, EventName: 'FirstBlood', EventTime: 150.3301, Recipient: N('Ember') },
+    { EventID: 3, EventName: 'ChampionKill', EventTime: 150.3301, KillerName: N('Ember'), VictimName: N('Onyx'), Assisters: [] },
+  ];
+  w.add(poll(g2, g2Events, 1.1), 420000);
+  for (const t of [66.0, 151.0, 152.0]) w.add(poll(g2, g2Events, t), 1000);
+  return w.save();
+}
+
+// node tools/fixtures/make-synthetic.mjs [name-prefix ...]: only (re)write the fixtures whose name starts with one.
+const only = process.argv.slice(2);
+const made = Object.entries({
+  'cs2-scrim-halftime.synthetic': () => cs2({ name: 'cs2-scrim-halftime.synthetic' }),
+  'cs2-local-bots.synthetic': () => cs2({ name: 'cs2-local-bots.synthetic', botNames: true, seed: 11 }),
+  'dota2-league-spectator.synthetic': () => dota({ name: 'dota2-league-spectator.synthetic' }),
+  'rocketleague-stats-api-3v3.synthetic': () => rocketLeague({ name: 'rocketleague-stats-api-3v3.synthetic' }),
+  'apex-liveapi-trios.synthetic': () => apex({ name: 'apex-liveapi-trios.synthetic' }),
+  'lol-spectator.synthetic': () => lol({ name: 'lol-spectator.synthetic' }),
+  'lol-full-game-player.synthetic': () => lolFullGame({ name: 'lol-full-game-player.synthetic' }),
+  'lol-spectator-riotid.synthetic': () => lolSpectatorRiotId({ name: 'lol-spectator-riotid.synthetic' }),
+  'lol-midgame-reconnect.synthetic': () => lolMidgameReconnect({ name: 'lol-midgame-reconnect.synthetic' }),
+}).filter(([n]) => !only.length || only.some((o) => n.startsWith(o)));
+for (const [n, build] of made) console.log(`${n}.jsonl  ${build()} payloads`);

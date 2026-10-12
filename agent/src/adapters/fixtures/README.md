@@ -26,7 +26,12 @@ the game.
 `node tools/replay.mjs <file> --live --speed 4` feeds the agent through the adapter's real port at
 the recorded pace (CS2/Dota POST, Rocket League serves the Stats API port, Apex connects to the
 adapter). The overlays and OBS move as they did on the day. Use it to rehearse a show with real data.
-League is not supported live (its client is polled over HTTPS).
+
+League polls the game client, so for League the tool plays the client: it serves the recorded polls on
+`http://127.0.0.1:2998` (`--port`), answering 503 through any hole in the recording, and the agent must
+be started with `CTA_LOL_REPLAY_URL=http://127.0.0.1:2998`. The adapter takes nothing but plain http on
+127.0.0.1 / localhost there; without the variable it polls the game's https://127.0.0.1:2999 as always.
+The adapter polls once a second, so above `--speed 1` it sees only some of the recorded polls.
 
 ## Still unconfirmed on a real game
 
@@ -36,3 +41,8 @@ League is not supported live (its client is polled over HTTPS).
   `Game.Winner` is the team name.
 - Apex: whether `timestamp` is epoch seconds (the match clock assumes it is a steady clock).
 - Dota 2: `radiant_win_chance` in live payloads; the `events` block.
+- League: everything not in Riot's two samples (allgamedata, eventdata): GameEnd's `Result` on a
+  spectator client (the adapter names a winner only from a player's client), the fields of
+  `InhibRespawningSoon` / `InhibRespawned` / `HordeKill` / `AtakhanKill`, whether eventdata names players
+  by `summonerName` ("Name#TAG") or Riot ID, what a spectator client restarting mid-game answers, and
+  whether EventIDs survive that restart (the adapter de-duplicates by content, so it does not rely on them).

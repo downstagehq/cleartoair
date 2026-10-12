@@ -62,6 +62,10 @@ export function TalentLinks({ desk, onChange }: { desk: RemoteStatus; onChange: 
     if (newest && autoShown.current !== newest) { autoShown.current = newest; setShown(newest); }
   }, [newest]);
   const turn: Turn = ((state?.settings as unknown as { talent?: { turn?: Turn } })?.talent?.turn) ?? {};
+  // Which sources the OBS collection builds for talent: VDO.Ninja views (the default) or the
+  // CTA Studio receivers these links feed. It takes effect when the collection is rebuilt.
+  const mode = ((state?.settings as unknown as { talent?: { mode?: string } })?.talent?.mode) === 'studio' ? 'studio' : 'vdo';
+  const setMode = (m: string) => void patch({ settings: { talent: { mode: m } } });
   const setTurn = (p: Turn) => void patch({ settings: { talent: { turn: p } } });
 
   const copy = async (text: string, what: string) => {
@@ -96,6 +100,18 @@ export function TalentLinks({ desk, onChange }: { desk: RemoteStatus; onChange: 
         For a caster on another network: one link per slot, single use, good for 15 minutes. Their camera and mic arrive
         on that slot&apos;s CTA Studio source in OBS. The link opens only the camera page — nothing of the desk.
       </p>
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <span className="text-[12px] text-ink-2">Talent sources in OBS</span>
+        <Select value={mode} onChange={(e) => setMode(e.currentTarget.value)} className="h-8 w-[220px]" aria-label="Talent sources in OBS">
+          <option value="vdo">VDO.Ninja (default)</option>
+          <option value="studio">CTA Studio (these links)</option>
+        </Select>
+        <span className="text-[12px] text-ink-3 max-w-[52ch]">
+          {mode === 'studio'
+            ? 'The links land in OBS once the collection is rebuilt: OBS collection → Hold to install, with OBS closed.'
+            : 'Talent links need CTA Studio sources: switch this, then rebuild the OBS collection.'}
+        </span>
+      </div>
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <Select value={slot} onChange={(e) => setSlot(e.currentTarget.value)} className="h-8 w-[220px]">
           {slots.map((s) => (

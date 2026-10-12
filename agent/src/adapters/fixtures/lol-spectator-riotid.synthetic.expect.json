@@ -1,0 +1,49 @@
+{
+  "adapter": "lolclient",
+  "payloads": 11,
+  "final": {
+    "phase": "gameover",
+    "mapName": "Summoner's Rift",
+    "scoreA": 2,
+    "scoreB": 1,
+    "sideA": "BLUE",
+    "sideB": "RED",
+    "names.A": "Blue",
+    "names.B": "Red",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0,
+    "players.0.name": "Nova#EUW",
+    "players.5.name": "Nova#KR1",
+    "players.1.name": "Kestrel",
+    "extra.objectives.BLUE.dragons": 1,
+    "extra.objectives.RED.dragons": 1,
+    "extra.objectives.RED.barons": 1,
+    "events.14.text": "Game over"
+  },
+  "events": [
+    "match_start",
+    "info",
+    "first_blood",
+    "kill",
+    "dragon",
+    "turret",
+    "baron",
+    "inhib",
+    "match_end"
+  ],
+  "problems": 0,
+  "frames": {
+    "1": {
+      "events.3.text": "Nova#KR1 killed Nova#EUW (assist: Ember)"
+    },
+    "3": {
+      "events.5.text": "Kestrel killed Vex (assist: Sea Lion)"
+    },
+    "7": {
+      "events.9.text": "Baron Nashor killed Talon"
+    }
+  },
+  "why": "Spectator after the Riot ID change: no activePlayer, legacy/empty summonerNames, two players called Nova told apart by tag; a spectator's GameEnd names no winner."
+}

@@ -213,21 +213,21 @@ export function createPreflight(ctx) {
 
   function stateChecks(out) {
     const st = state.get();
-    if (!st || typeof st !== 'object' || !st.teams || !st.series) { out.push(fail('state-loads', 'Your saved show is damaged', 'the event has no teams or series', 'Setup tab → hold "New event" to start clean, or press ⌘K → Undo if this just happened.')); return; }
+    if (!st || typeof st !== 'object' || !st.teams || !st.series) { out.push(fail('state-loads', 'Your saved show is damaged', 'the event has no teams or series', 'Setup tab → "Hold for new event" to start clean, or press ⌘K → Undo if this just happened.')); return; }
     const info = typeof stateMod.loadInfo === 'function' ? (() => { try { return stateMod.loadInfo(); } catch { return null; } })() : null;
     if (info && info.from && info.from !== 'file' && !freshInstall(info)) {
       out.push(fail('state-loads', `Your saved show could not be read; it was restored from ${info.from === 'backup' ? 'backup' : 'defaults'}`,
         info.reason ? String(info.reason) : '',
         info.from === 'backup'
           ? 'Check the event, teams, scores and rundown in the Setup and Match tabs before air — the backup may be a few changes behind.'
-          : 'Everything is back to the sample show. Set your event and teams in Setup (or hold "New event") before air.'));
+          : 'Everything is back to the sample show. Set your event and teams in Setup (or "Hold for new event") before air.'));
     } else {
       out.push(ok('state-loads', `state loaded - ${st.series.label || st.series.id}`, `${st.series.teamA} v ${st.series.teamB}, ${Object.keys(st.teams).length} teams, rev ${state.revision()}`));
     }
 
     if (isSampleData(st)) {
       out.push(fail('sample-data', 'The sample event is still loaded', `"${st.event.name}" with the built-in sample teams (${Object.values(st.teams).map((t) => t.name).join(', ')})`,
-        'Set your event and teams in Setup, or press New event'));
+        'Set your event and teams in Setup, or use "Hold for new event" there'));
     } else out.push(ok('sample-data', 'event and teams are your own', st.event && st.event.name));
 
     const pack = packs.get(st.game);
@@ -311,7 +311,7 @@ export function createPreflight(ctx) {
     if (running) return running;
     running = (async () => {
       const out = [ok('agent-up', `agent up ${Math.round(process.uptime())} s`, `pid ${process.pid}, port ${ctx.port}`)];
-      try { stateChecks(out); } catch (e) { out.push(fail('state-loads', 'The show check crashed', e.message, 'Press "Run again" on the Preflight tab; if it stays, restart Clear to Air.')); }
+      try { stateChecks(out); } catch (e) { out.push(fail('state-loads', 'The show check crashed', e.message, 'Press "Run now" on the Preflight tab; if it stays, restart Clear to Air.')); }
       try { await obsChecks(out); } catch (e) { out.push(warn('obs-connected', 'OBS check threw', e.message)); }
       try { lanChecks(out); } catch (e) { out.push(warn('gsi-lan', 'LAN check threw', e.message)); }
       try { await overlayChecks(out); } catch (e) { out.push(warn('browser-sources-online', 'overlay check threw', e.message)); }

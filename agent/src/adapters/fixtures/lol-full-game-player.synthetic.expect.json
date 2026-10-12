@@ -1,0 +1,52 @@
+{
+  "adapter": "lolclient",
+  "payloads": 18,
+  "final": {
+    "phase": "gameover",
+    "mapName": "Summoner's Rift",
+    "scoreA": 8,
+    "scoreB": 1,
+    "sideA": "BLUE",
+    "sideB": "RED",
+    "names.A": "Blue",
+    "names.B": "Red",
+    "players.length": 10,
+    "overtime": false,
+    "mode": "versus",
+    "round": 0,
+    "extra.winner": "Blue",
+    "extra.objectives.BLUE.inhibs": 2,
+    "extra.objectives.BLUE.turrets": 4,
+    "extra.objectives.RED.barons": 1,
+    "events.19.text": "Game over — Blue side wins"
+  },
+  "events": [
+    "match_start",
+    "info",
+    "first_blood",
+    "kill",
+    "grub",
+    "dragon",
+    "turret",
+    "herald",
+    "multikill",
+    "atakhan",
+    "baron",
+    "ace",
+    "inhib",
+    "match_end"
+  ],
+  "problems": 0,
+  "frames": {
+    "5": {
+      "events.8.text": "Blue turret killed Ember"
+    },
+    "6": {
+      "events.9.text": "Blue minions destroyed a turret"
+    },
+    "11": {
+      "events.19.text": "Rift killed Baron Nashor (stolen!)"
+    }
+  },
+  "why": "A player client (Rift, red) through a whole game: GameEnd Result \"Lose\" is the active player's, so blue won; executes and minion-taken turrets/inhibs are named and counted by the building, not the killer."
+}

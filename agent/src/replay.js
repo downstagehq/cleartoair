@@ -67,6 +67,12 @@ const REPLAYERS = {
 
 export const REPLAYABLE = Object.keys(REPLAYERS);
 
+// Adapters whose events carry the game's own clock (so an event's key is stable from poll to poll)
+// and whose scores are kill counts: they get the per-game invariants below. Not CS2 (event times are
+// the wall clock; a restart on the same map legitimately zeroes the score) - opt others in with care.
+const PER_GAME = { lolclient: true };
+const evKey = (e) => `${e.type}|${e.text}|${e.t}`;
+
 /** Which game a capture belongs to, from its header or its adapter. */
 export const ADAPTER_GAME = { cs2gsi: 'cs2', dota2gsi: 'dota2', lolclient: 'lol', rlstats: 'rocketleague', apexlive: 'apex' };
 
@@ -86,6 +92,7 @@ export function replayCapture(cap, { state = { settings: {} }, adapter, session 
   const events = [];
   const seenEvents = new Set();
   const teamOf = new Map(); // player name -> 'A'|'B', reset at a map change
+  const aired = new Set();  // PER_GAME adapters: every event key that has been on air this game
   let feed = null, curSession = -1, mapKey = null;
 
   const list = session == null ? cap.payloads : cap.payloads.filter((p) => p.session === session);
@@ -120,8 +127,25 @@ export function replayCapture(cap, { state = { settings: {} }, adapter, session 
       if (pl.team !== 'A' && pl.team !== 'B') { problems.push({ i, t: entry.t, kind: 'team', message: `${pl.name || '?'} has no A/B team (${pl.team})` }); continue; }
     }
     // A player keeps their team for a whole map (the CS2 halftime bug: sides swap, teams must not).
-    const mk = `${live.mapName}|${live.extra?.matchId ?? live.extra?.matchGuid ?? ''}`;
-    if (mk !== mapKey) { mapKey = mk; teamOf.clear(); }
+    // League has no match id: the adapter numbers the games it sees (extra.gameNo).
+    const mk = `${live.mapName}|${live.extra?.matchId ?? live.extra?.matchGuid ?? live.extra?.gameNo ?? ''}`;
+    const newMap = mk !== mapKey;
+    if (newMap) { mapKey = mk; teamOf.clear(); }
+    if (PER_GAME[id]) {
+      // Within one game: kill scores and the game clock only go up, and an event, once on air, is never
+      // announced again (a poller that re-reads the whole event list on every poll must not re-push it).
+      const prevF = newMap ? null : frames.at(-2);
+      if (prevF && (live.scoreA < prevF.scoreA || live.scoreB < prevF.scoreB)) problems.push({ i, t: entry.t, kind: 'score-down', message: `score went from ${prevF.scoreA}-${prevF.scoreB} to ${live.scoreA}-${live.scoreB} within a game` });
+      if (prevF && live.clockSeconds < prevF.clockSeconds) problems.push({ i, t: entry.t, kind: 'clock-back', message: `game clock went back from ${prevF.clock} to ${live.clock} within a game` });
+      if (newMap) aired.clear();
+      const before = new Set((prevF?.events || []).map(evKey));
+      const now = (live.events || []).map(evKey);
+      if (new Set(now).size !== now.length) problems.push({ i, t: entry.t, kind: 'event-dup', message: `the same event is on air twice (${now.find((k, j) => now.indexOf(k) !== j)})` });
+      for (const k of now) {
+        if (!before.has(k) && aired.has(k)) problems.push({ i, t: entry.t, kind: 'event-again', message: `event announced again: ${k}` });
+        aired.add(k);
+      }
+    }
     for (const pl of live.players || []) {
       if (!pl.name || (pl.team !== 'A' && pl.team !== 'B')) continue;
       const was = teamOf.get(pl.name);

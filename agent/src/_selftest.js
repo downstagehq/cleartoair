@@ -30,7 +30,7 @@ globalThis.window = globalThis;
 globalThis.document = { getElementById: () => null, documentElement: { dataset: {} }, body: null };
 globalThis.CTA = { esc: (v) => String(v == null ? '' : v), team: () => null, show: () => {}, txt: () => {} };
 await import('../../overlays/_shared/render.js');
-const { objectiveRows, roundHistory, playerStat, liveScoreboardRows, standbyScene } = globalThis.CTA.render;
+const { objectiveRows, roundHistory, playerStat, liveScoreboardRows, standbyScene, deskScene } = globalThis.CTA.render;
 
 let failures = 0;
 const ok = (cond, msg) => { console.log(`${cond ? '  PASS' : '  FAIL'} ${msg}`); if (!cond) failures++; };
@@ -651,6 +651,7 @@ eq(liveScoreboardRows({ series: {}, live: { connected: false, players: [dotaPlay
 eq(liveScoreboardRows({ series: { teamA: 'alpha' }, live: { connected: true, players: [] } }, ['k']), [], 'no players means no rows');
 eq(liveScoreboardRows({}, ['k']), [], 'no live block is not an error');
 eq(['01 · STARTING SOON', '06 · BRB', '08 · OUTRO', '04 · IN-GAME', '02 · DESK', '010 · X', '', null].map(standbyScene), [true, true, true, false, false, false, false, false], 'the scorebug hides on the standby scenes only (01, 06, 08)');
+eq(['02 · DESK', '04 · IN-GAME', '01 · STARTING SOON', '020 · X', null].map(deskScene), [true, false, false, false, false], 'the corner tag hides on 02 DESK only (it covered the right-hand nameplate)');
 // After the final whistle the feed drops (or a Rocket League lobby closes and empties the players):
 // the agent's live.result for THIS title is what the post-match card shows.
 const RESULT = { game: 'rocketleague', scoreA: 2, scoreB: 1, players: [{ ...rlPlayer, team: 'A', name: 'Zephyr' }, rlPlayer] };
