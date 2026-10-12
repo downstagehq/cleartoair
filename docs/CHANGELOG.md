@@ -3,6 +3,22 @@
 Newest first. One section per release; the notes for `gh release create` come from here
 (see [RELEASE.md](RELEASE.md), step 1).
 
+## 0.3.4 - the replay cuts back by itself
+
+**Upgrading:** nothing to do. It is on by default; switch it off under Replay in the Air column.
+
+- **Back to the game when the replay ends.** When 05 · REPLAY goes on program (Save & cut,
+  or a cut by hand), Clear to Air remembers the scene that was on before and cuts back to it
+  when the clip finishes. It knows the clip has finished because OBS says so, and it also
+  checks the clip's length in case that signal never comes. The cut uses the scene's normal
+  transition. The Air column shows "Back to 04 · IN-GAME in 6 s" with a **Hold** button to
+  stay on the replay this time. If you cut somewhere else first, nothing happens. Tested in
+  OBS 32.2.2: Save & cut on a 7-second clip went back to 04 by itself 8.3 s later.
+- **Talent links work on room.cleartoair.com.** The hosted relay now carries them (it was
+  redeployed with 0.3.3's relay, plus a fix: Cloudflare was answering the talent page with
+  the control room's own page). Tested over the internet: the link opens over HTTPS, media
+  flows, and an agent restart, an OBS refresh and closing the seat all behave.
+
 ## 0.3.3 - an observer PC, talent links, a sharper scoreboard reader
 
 **Upgrading:** nothing to do. LAN listening is off until you switch it on.

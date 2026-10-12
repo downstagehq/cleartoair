@@ -16,6 +16,10 @@
 //        real relay Worker + room run locally (relay/test/harness.mjs), the talent opens
 //        its invite link on the relay origin, OBS's view.html stays local on the rig,
 //        and the relay/rig sockets are dropped mid-call. Nothing is deployed.
+//   node tools/bench/talent-bench.mjs --relay --relay-url https://room.cleartoair.com
+//        the same against a DEPLOYED relay: the talent's page and signaling cross the real
+//        internet (Cloudflare), the door form is filled like a person would. The socket-drop
+//        cases need the local harness and are skipped.
 //   node tools/bench/talent-bench.mjs --watch caster1 receiver only: open view.html in a
 //        headless Chrome against a running agent and print its getStats() every 2 s
 //        (for a two-device test - the talent joins from the other device).
@@ -48,6 +52,7 @@ const PORT = Number(arg('--port', 7700));
 const SPAWN_AGENT = !arg('--no-agent', false);
 const WATCH = arg('--watch', null);
 const RELAY = !!arg('--relay', false);
+const RELAY_LIVE = (() => { const v = arg('--relay-url', null); return typeof v === 'string' ? v.replace(/\/+$/, '') : null; })();
 const CHROME = arg('--chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 const SCRATCH = path.resolve(String(arg('--scratch', path.join(os.tmpdir(), 'claude', 'talent-bench'))));
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -586,8 +591,8 @@ async function relayBench() {
   const { pathToFileURL } = await import('node:url');
   const { startHarness } = await import(pathToFileURL(path.join(ROOT, 'relay', 'test', 'harness.mjs')).href);
   const { randomId } = await import(pathToFileURL(path.join(ROOT, 'relay', 'src', 'protocol.js')).href);
-  harness = await startHarness({ port: Number(arg('--relay-port', 8790)) });
-  const RELAY_URL = harness.url;
+  if (!RELAY_LIVE) harness = await startHarness({ port: Number(arg('--relay-port', 8790)) });
+  const RELAY_URL = RELAY_LIVE || harness.url;
 
   // The rig, paired with that relay - what the Remote panel writes when switched on.
   const dataDir = path.join(SCRATCH, 'agent-data-relay');
@@ -602,7 +607,7 @@ async function relayBench() {
   };
   const paired = async () => { try { return (await api('/api/remote')).connected === true; } catch { return false; } };
   const waitPaired = async (ms = 20000) => { const end = now() + ms; while (now() < end) { if (await paired()) return true; await sleep(250); } return false; };
-  if (!(await waitPaired())) throw new Error('the agent never paired with the local relay');
+  if (!(await waitPaired())) throw new Error(`the agent never paired with the relay ${RELAY_URL}`);
   console.log(`agent ${BASE} paired with relay ${RELAY_URL} (room ${room.slice(0, 6)}...)`);
 
   const inv = await api('/api/remote/talent-invite', { slot: 'caster1', name: 'Riley' });
@@ -617,7 +622,14 @@ async function relayBench() {
 
   // The talent opens the invite link ON THE RELAY ORIGIN (?auto= is the
   // harness's one-navigation stand-in for typing a name and pressing the button).
-  const talent = await openTab(talentChrome, 'talent', `${inv.link}?auto=Riley`);
+  let talent;
+  if (RELAY_LIVE) {
+    // A deployed relay has no ?auto= shortcut: fill in the door like a person.
+    talent = await openTab(talentChrome, 'talent', inv.link);
+    await waitFor(talent, `!!document.getElementById('n')`, 20000);
+    await talent.eval(`(() => { document.getElementById('n').value = 'Riley'; document.querySelector('form').submit(); return true; })()`);
+    await sleep(1500);
+  } else talent = await openTab(talentChrome, 'talent', `${inv.link}?auto=Riley`);
   await waitFor(talent, `typeof localStream !== 'undefined' && !!localStream && localStream.getTracks().length === 2`, 20000);
   const where = await talent.eval(`({ href: location.href, secure: window.isSecureContext })`);
   let t0 = await goLive(talent);
@@ -636,9 +648,11 @@ async function relayBench() {
     hub: (await api('/api/talent')).slots,
   });
 
+  let pcs; let tX;
+  if (!RELAY_LIVE) {
   // R-B. The relay drops the talent's socket (Cloudflare eviction / redeploy).
-  let pcs = (await stats(rx)).pcCount;
-  let tX = now();
+  pcs = (await stats(rx)).pcCount;
+  tX = now();
   harness.dropClients(room);
   await sleep(800);
   const midB = await flowing(rx, 1500);
@@ -664,6 +678,7 @@ async function relayBench() {
     mediaAfter: { ok: afterC.ok, videoKbps: afterC.videoKbps }, renegotiated: (await stats(rx)).pcCount > pcs ? 'yes' : 'no - the same call carried on',
     talentWs: await tWs(tX),
   });
+  }
 
   // R-D. The agent process restarts (update, crash): the talent's seat and slot
   // binding are in remote.json, so it comes back to the same slot.

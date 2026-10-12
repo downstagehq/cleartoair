@@ -280,6 +280,8 @@ export interface Settings {
   updateUrl?: string;
   /** F1-F8 cut straight to program instead of arming preview. Off by default. */
   fastCut?: boolean;
+  /** Cut back to the scene before the replay when the clip ends (default on). */
+  replayAutoReturn?: boolean;
   /** Flip which in-game side is team A (honoured by the adapters' normalize()). */
   swapSides?: boolean;
 }
@@ -346,6 +348,8 @@ export interface ObsStatus {
   replayBuffer?: boolean;
   error?: string | null;
   lastReplay?: string | null;
+  /** After a replay: the scene the agent will cut back to and when (agent/src/obs/replay-return.js). */
+  replayReturn?: { to: string; endsAt: number | null; since: number } | null;
   meters?: Record<string, number>;
   /** Talent audio mute as OBS reports it (GetInputMute); 'mixed' when some are muted. */
   talentMute?: { muted: boolean | 'mixed' | null; inputs: { name: string; muted: boolean | null }[] };

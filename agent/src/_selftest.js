@@ -753,6 +753,74 @@ eq(repointUrl('http://127.0.0.1:7700/overlay/ingame.html', 'http://127.0.0.1:772
 eq(repointUrl('http://localhost:7700/packs/cs2/overlay/desk.html?who=hosts', 'http://127.0.0.1:7720'), 'http://127.0.0.1:7720/overlay/desk.html?who=hosts', 'old per-pack URL on localhost: generic page, this origin, query kept');
 eq(repointUrl('http://127.0.0.1:7720/overlay/cards.html', 'http://127.0.0.1:7720'), null, 'already right: left alone');
 eq(repointUrl('https://vdo.ninja/?room=x&view=a', 'http://127.0.0.1:7720'), null, 'VDO.Ninja is never repointed');
+console.log('\n== replay: back to the show when the clip ends ==');
+{
+  const { createReplayReturn, isReplayScene, BACKSTOP_MS, END_SETTLE_MS, UNKNOWN_CAP_MS } = await import('./obs/replay-return.js');
+  const flush = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r)); };
+  // Fake OBS + fake clock: nothing waits on real time.
+  const rig = ({ duration = 9000, cursor = 0, settings = {}, scenes = ['01 · STARTING SOON', '03 · CARDS', '04 · IN-GAME', '05 · REPLAY', '07 · POST-MATCH'] } = {}) => {
+    let t = 0; const q = [];
+    const timers = { setTimeout: (fn, ms) => { const h = { at: t + ms, fn }; q.push(h); return h; }, clearTimeout: (h) => { const i = q.indexOf(h); if (i >= 0) q.splice(i, 1); } };
+    const advance = async (ms) => { const end = t + ms; for (;;) { await flush(); q.sort((a, b) => a.at - b.at); const h = q[0]; if (!h || h.at > end) break; q.shift(); t = h.at; h.fn(); } t = end; await flush(); };
+    const status = { program: '04 · IN-GAME', scenes: scenes.map((name) => ({ name })) };
+    const cuts = []; const lines = [];
+    const rr = createReplayReturn({
+      call: async (type) => { if (type !== 'GetMediaInputStatus') throw new Error(type); if (duration == null) return { mediaState: 'OBS_MEDIA_STATE_NONE', mediaDuration: null }; return { mediaState: 'OBS_MEDIA_STATE_PLAYING', mediaDuration: duration, mediaCursor: cursor }; },
+      getStatus: () => status, setScene: async (n) => { cuts.push(n); const prev = status.program; status.program = n; rr.onProgram(prev, n); return { ok: true }; },
+      getSettings: () => settings, log: { info: (_t, m) => lines.push(m), warn: (_t, m) => lines.push(`WARN ${m}`) }, now: () => t, timers,
+    });
+    const cut = async (n) => { const prev = status.program; status.program = n; rr.onProgram(prev, n); await flush(); };
+    return { rr, cut, advance, cuts, lines, status, now: () => t };
+  };
+
+  ok(isReplayScene('05 · REPLAY') && !isReplayScene('050') && !isReplayScene('04 · IN-GAME'), 'the replay scene is 05');
+
+  let r = rig();
+  await r.cut('05 · REPLAY');
+  ok(r.rr.status()?.to === '04 · IN-GAME' && r.rr.status()?.endsAt === 9000 + BACKSTOP_MS, `armed: back to 04 when the 9 s clip is over (+${BACKSTOP_MS} ms backstop)`);
+  await r.advance(5000); r.rr.onMediaEnded('REPLAY · Last Clip'); await r.advance(END_SETTLE_MS + 10);
+  eq(r.cuts, ['04 · IN-GAME'], 'OBS says the clip ended: cut back to 04 at once');
+  ok(r.rr.status() === null && r.lines.some((l) => /replay over \(clip ended\) - back to 04/.test(l)), 'disarmed and logged');
+
+  r = rig();
+  await r.cut('05 · REPLAY'); await r.advance(9000 + BACKSTOP_MS + 5);
+  eq(r.cuts, ['04 · IN-GAME'], 'no end event (OBS missed it): the clip length backstop cuts back');
+
+  r = rig({ duration: 12000, cursor: 4000 });
+  await r.cut('05 · REPLAY');
+  eq(r.rr.status()?.endsAt, 8000 + BACKSTOP_MS, 'the time left is the duration minus where the clip already is');
+
+  r = rig();
+  await r.cut('07 · POST-MATCH'); await r.cut('05 · REPLAY'); r.rr.onMediaEnded('REPLAY · Last Clip'); await r.advance(500);
+  eq(r.cuts, ['07 · POST-MATCH'], 'it goes back to the scene before the replay (07 post-match here), not always 04');
+
+  r = rig();
+  await r.cut('05 · REPLAY'); await r.advance(2000); await r.cut('03 · CARDS'); r.rr.onMediaEnded('REPLAY · Last Clip'); await r.advance(20000);
+  ok(r.cuts.length === 0 && r.status.program === '03 · CARDS', 'the operator cut away first: nothing happens');
+
+  r = rig();
+  await r.cut('05 · REPLAY'); const held = r.rr.hold(); await r.advance(20000); r.rr.onMediaEnded('REPLAY · Last Clip'); await r.advance(500);
+  ok(held.held && r.cuts.length === 0 && r.status.program === '05 · REPLAY', 'Hold: stays on the replay');
+
+  r = rig({ settings: { replayAutoReturn: false } });
+  await r.cut('05 · REPLAY'); await r.advance(20000);
+  ok(r.rr.status() === null && r.cuts.length === 0, 'switched off in settings: never cuts');
+
+  r = rig();
+  await r.cut('05 · REPLAY'); r.rr.onMediaEnded('MEDIA · Intro'); await r.advance(500);
+  ok(r.cuts.length === 0, 'another media source ending is ignored');
+
+  r = rig({ duration: null });
+  await r.cut('05 · REPLAY'); await r.advance(2000);
+  ok(r.rr.status()?.endsAt === r.rr.status().since + 1500 + UNKNOWN_CAP_MS || r.rr.status()?.endsAt > 60000, `no clip length reported: waits for the end event, capped at ${UNKNOWN_CAP_MS / 1000} s`);
+  r.rr.onMediaEnded('REPLAY · Last Clip'); await r.advance(500);
+  eq(r.cuts, ['04 · IN-GAME'], '...and the end event still brings it back');
+
+  r = rig({ scenes: ['05 · REPLAY', '07 · POST-MATCH'] });
+  r.status.program = '05 · REPLAY'; await r.cut('05 · REPLAY');
+  ok(r.rr.status() === null && r.lines.some((l) => /no scene to go back to/.test(l)), 'nowhere to go back to (no 04, came from 05): does nothing and says so');
+}
+
 eq(repointUrl('http://192.168.1.20:7700/overlay/ingame.html', 'http://127.0.0.1:7720'), null, 'a page on another machine is not ours to move');
 eq(build({ state: { game: 'cs2', settings: {}, talent: [] }, port: 7720 }).sources.filter((x) => x.id === 'browser_source' && /^GFX · /.test(x.name)).every((x) => x.settings.url.startsWith('http://127.0.0.1:7720/overlay/')), true, 'the collection points its graphics at the port this agent listens on (--port), not 7700');
 for (const p of ['ingame', 'cards', 'standby', 'desk']) ok(fs.existsSync(path.resolve(PACKS_DIR, '..', 'overlays', 'live', `${p}.html`)), `overlays/live/${p}.html exists`);

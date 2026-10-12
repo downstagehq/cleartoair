@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, CircleDot, Film, Mic, MicOff, Radio, Square } from 'lucide-react';
-import { Button, ConfirmHold, Keycap, Pill, SceneTile } from '../components';
+import { Button, ConfirmHold, Keycap, Pill, SceneTile, Toggle } from '../components';
 import { TAKE_ARM_MS, talentMuteState, useStore } from '../store';
 import { can } from '../remote';
 import { RECIPE_SCENES, resolveScene, sceneNumber, sceneTitle } from '../types';
@@ -98,6 +98,18 @@ export function Air() {
   const mayBroadcast = mayAir && (!seat || !!seatCaps.streamControl);
   const obsAction = useStore((s) => s.obsAction);
   const fastCut = !!state?.settings?.fastCut;
+  // After a replay the agent cuts back by itself; show where to and when, with a way to stay.
+  const back = obs.replayReturn ?? null;
+  const [backTick, setBackTick] = useState(0);
+  useEffect(() => {
+    if (!back) return;
+    const t = window.setInterval(() => setBackTick((n) => n + 1), 500);
+    return () => window.clearInterval(t);
+  }, [!!back]);
+  void backTick;
+  const backIn = back && back.endsAt ? Math.max(0, Math.ceil((back.endsAt - Date.now()) / 1000)) : null;
+  const autoBack = state?.settings?.replayAutoReturn !== false;
+  const patch = useStore((s) => s.patch);
 
   const tick = useTick(seat ? 8000 : 4000, obs.connected);
   const pgmSrc = obs.connected ? `/api/obs/shot?w=${shotWidth}&t=${tick}` : null;
@@ -176,6 +188,25 @@ export function Air() {
             Save & cut
           </Button>
         </div>
+        {back ? (
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="text-[12px] text-ink-2">
+              Back to <b className="text-ink">{back.to}</b>
+              {backIn !== null ? ` in ${backIn} s` : ' when the clip ends'}
+            </span>
+            <Button size="sm" variant="ghost" disabled={!obs.connected || !mayAir} onClick={() => void replay('hold')} title="Stay on the replay this time">
+              Hold
+            </Button>
+          </div>
+        ) : null}
+        {seat ? null : (
+          <Toggle
+            className="px-1"
+            on={autoBack}
+            onChange={(v) => void patch({ settings: { replayAutoReturn: v } })}
+            label={<span className="text-[12px] text-ink-2">Back to the game when the replay ends</span>}
+          />
+        )}
         <Button
           block
           icon={talentMuted ? <MicOff size={14} /> : <Mic size={14} />}

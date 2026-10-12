@@ -22,9 +22,10 @@ directory = "./public"
 binding = "ASSETS"
 # The control room is a single-page app: any path it owns must come back as
 # index.html. The Worker already claims /api, /ws, /packs, /j and /waiting
-# before the assets are consulted.
+# before the assets are consulted, and so do the talent page and its signaling socket
+# (left off this list, Cloudflare answered them with the control room's index.html).
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/ws", "/packs/*", "/j/*", "/waiting", "/healthz", "/__agent", "/__health"]
+run_worker_first = ["/api/*", "/ws", "/packs/*", "/j/*", "/waiting", "/healthz", "/__agent", "/__health", "/overlays/talent/*", "/talent/signaling"]
 
 [[durable_objects.bindings]]
 name = "ROOM"

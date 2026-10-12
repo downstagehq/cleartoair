@@ -6,6 +6,7 @@ import OBSWebSocket, { EventSubscription } from 'obs-websocket-js';
 import { obsConnection } from '../config.js';
 import { log } from '../log.js';
 import { TALENT_AUDIO_RE } from './collection.js';
+import { createReplayReturn } from './replay-return.js';
 
 const BACKOFF_MIN = 2000;
 const BACKOFF_MAX = 30000;
@@ -63,13 +64,16 @@ export function createBridge({ getSettings = () => ({}), onStatus = () => {}, ov
   let reconnectTimer = null;
   let stopped = false;
   let localPreview = null;          // preview slot when OBS is not in studio mode
+  // After a replay, cut back to where the show was (replay-return.js). Function declarations
+  // below are hoisted, so call/setScene/emit are callable here.
+  const replayReturn = createReplayReturn({ call: (t, d) => call(t, d), getStatus: () => status, setScene: (n) => setScene(n), getSettings, log, emit: () => emit() });
   let meterDirty = false;
   let meterTimer = null;
   let readyToken = 0;
   let loggedUnreachable = false;
   const itemCache = new Map();      // scene -> { at, items }
 
-  function emit() { onStatus(status); }
+  function emit() { status.replayReturn = replayReturn ? replayReturn.status() : null; onStatus(status); }
 
   function emitMeters() {
     // InputVolumeMeters arrives ~20x/s; the control room only needs 4 Hz
@@ -266,7 +270,14 @@ export function createBridge({ getSettings = () => ({}), onStatus = () => {}, ov
   obs.on('ConnectionError', () => { /* handled by ConnectionClosed / connect() catch */ });
 
   obs.on('CurrentSceneCollectionChanged', () => { readyRefresh(); });
-  obs.on('CurrentProgramSceneChanged', (d) => { status.program = d.sceneName; loadProgramItems().then(emit, emit); });
+  obs.on('CurrentProgramSceneChanged', (d) => {
+    const prev = status.program;
+    status.program = d.sceneName;
+    try { replayReturn.onProgram(prev, d.sceneName); } catch (e) { log.warn('obs', `replay return: ${e.message}`); }
+    loadProgramItems().then(emit, emit);
+  });
+  // The replay clip finished: replay-return.js cuts back to where the show was.
+  obs.on('MediaInputPlaybackEnded', (d) => { try { replayReturn.onMediaEnded(d.inputName); } catch (e) { log.warn('obs', `replay return: ${e.message}`); } });
   obs.on('CurrentPreviewSceneChanged', (d) => { status.preview = d.sceneName; emit(); });
   for (const ev of ['SceneListChanged', 'SceneCreated', 'SceneRemoved', 'SceneNameChanged', 'InputNameChanged', 'InputRemoved', 'InputCreated']) {
     obs.on(ev, () => { refresh().then(emit, emit); });
@@ -358,9 +369,10 @@ export function createBridge({ getSettings = () => ({}), onStatus = () => {}, ov
   }
 
   async function replay(action) {
+    if (action === 'hold') return replayReturn.hold();
     if (action === 'start') { await call('StartReplayBuffer'); return { ok: true }; }
     if (action === 'stop') { await call('StopReplayBuffer'); return { ok: true }; }
-    if (action !== 'save') throw new Error('replay action must be start | stop | save');
+    if (action !== 'save') throw new Error('replay action must be start | stop | save | hold');
     if (!status.replayBuffer) throw new Error('replay buffer is not running - start it first');
     const before = status.lastReplay;
     await call('SaveReplayBuffer');

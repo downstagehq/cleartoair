@@ -151,7 +151,7 @@ interface Store {
   armTake(): void;
   disarmTake(): void;
   take(): Promise<void>;
-  replay(action: 'start' | 'stop' | 'save', cut?: boolean): Promise<void>;
+  replay(action: 'start' | 'stop' | 'save' | 'hold', cut?: boolean): Promise<void>;
   muteTalent(on?: boolean): Promise<void>;
   // graphics
   setCard(card: CardId, team?: string | null): Promise<void>;
@@ -359,7 +359,8 @@ export const useStore = create<Store>((set, getS) => ({
 
   async replay(action, cut) {
     await getS().obsAction('replay', { action, cut: !!cut });
-    if (action === 'save') toastAir(cut ? 'Replay saved · cut to 05' : 'Replay saved');
+    if (action === 'hold') toastOk('Holding on the replay', 'cut away yourself when you are done');
+    else if (action === 'save') toastAir(cut ? 'Replay saved · cut to 05' : 'Replay saved');
     else toastOk(action === 'start' ? 'Replay buffer started' : 'Replay buffer stopped');
   },
 

@@ -328,6 +328,8 @@ Scene recipe `recipe.default` (scene name → items, front-to-back):
 03 · CARDS           cards.html + bg                               + audio bed(casters)
 04 · IN-GAME         ingame.html + caster PiP group (hidden) + GAME capture + audio bed(casters)
 05 · REPLAY          ingame.html + REPLAY media + bg                + audio bed(casters)
+                     on program: back to the previous scene when the clip ends (obs/replay-return.js;
+                     settings.replayAutoReturn, POST /api/obs/replay {action:"hold"}, obs.replayReturn {to, endsAt})
 06 · BRB             standby.html + bg                             + audio bed(none)
 07 · POST-MATCH      cards.html + desk.html + cams + bg            + audio bed(all)
 08 · OUTRO           standby.html + bg                             + audio bed(all)

@@ -26,6 +26,21 @@ const PORT = 7793;
 
 let failures = 0;
 const ok = (cond, msg) => { console.log(`${cond ? '  PASS' : '  FAIL'} ${msg}`); if (!cond) failures++; };
+
+// On Cloudflare the static assets answer first, single-page style, for any path not in
+// wrangler.toml's run_worker_first. This harness has no asset layer, so a route the Worker
+// handles but that list misses passes here and serves index.html in production (it happened
+// to the talent page in 0.3.3). Every path the Worker documents must be on the list.
+{
+  const toml = fs.readFileSync(path.join(ROOT, 'relay', 'wrangler.toml'), 'utf8');
+  const list = JSON.parse((/^run_worker_first\s*=\s*(\[.*\])\s*$/m.exec(toml) || [])[1] || '[]');
+  const covers = (p) => list.some((pat) => (pat.endsWith('/*') ? p.startsWith(pat.slice(0, -1)) || p === pat.slice(0, -2) : p === pat));
+  const head = fs.readFileSync(path.join(ROOT, 'relay', 'src', 'worker.js'), 'utf8').split('\n').slice(0, 40).join('\n');
+  const claimed = [...head.matchAll(/^\/\/\s+(?:GET|POST|\*)\s+(\/[^\s]*)(?:\s+(\/[^\s]+))?/gm)].flatMap((m) => [m[1], m[2]]).filter(Boolean)
+    .map((p) => p.replace(/\?.*$/, '').replace(/<[^>]+>.*$/, 'x').replace(/\*\*$/, 'x')).filter((p) => p !== '/');
+  const missing = claimed.filter((p) => !covers(p));
+  ok(claimed.length >= 8 && missing.length === 0, `wrangler.toml run_worker_first covers every route the Worker claims (${claimed.length})${missing.length ? ` - missing: ${missing.join(', ')}` : ''}`);
+}
 const eq = (a, b, msg) => ok(JSON.stringify(a) === JSON.stringify(b), `${msg}${JSON.stringify(a) === JSON.stringify(b) ? '' : ` — got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
