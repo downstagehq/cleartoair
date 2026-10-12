@@ -131,7 +131,7 @@ cleartoair/
     "ball": { "speed": 0, "team": null },
     "events": [ { "t": 0, "type": "goal|kill|round_end|bomb_planted|...", "text": "" } ]  // last 20
   },
-  "settings": { "obsCollectionName": "ClearToAir", "canvas": [1920,1080], "replayDir": "", "gsiToken": "cta" }
+  "settings": { "obsCollectionName": "ClearToAir", "canvas": [1920,1080], "replayDir": "", "gsiToken": "cta", "gsiLan": { "enabled": false, "allow": [] } }
 }
 ```
 
@@ -360,6 +360,8 @@ GET  /api/adapters/:id/install        install() output (files + instructions)
 POST /api/adapters/:id/install {replace?}  write the cfg into the game (steam adapters) -> {ok, found, written,
                                       unchanged, foreign, backup, path, tried[], files, instructions}
 GET|POST /api/adapters/:id/capture {on}   "Record raw game data" -> {on, file, bytes, payloads, maxBytes, reason}
+GET  /api/gsi/lan                     observer PC: {enabled, allow, addresses, receivers:[{id,boundHost,port,refused}], observer:[{id,uri,content}]}
+POST /api/gsi/lan {enabled, allow}    exact IPs only (400 lists what was refused); rebinds running GSI receivers (0.0.0.0 / 127.0.0.1). Local only.
     install and capture are local-only: no remote-policy rule, so a remote seat gets 403
 POST /api/sim/:game/start | stop
 GET  /api/obs                         bridge.status()

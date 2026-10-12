@@ -5,6 +5,7 @@ import { Field, Input } from './Field';
 import { Empty, Panel } from './Panel';
 import { Pill } from './Pill';
 import { Toggle } from './Toggle';
+import { TalentLinks } from './TalentLinks';
 import { errText } from '../api';
 import { toastErr, toastOk, useStore } from '../store';
 import {
@@ -38,6 +39,8 @@ export function RemoteSeats() {
   // the other seats). Either way there is nothing to show here.
   if (seat || remote === 'unavailable') return null;
   const desk = remote;
+  // Talent links get their own section (with a QR code), below.
+  const deskInvites = (desk?.invites ?? []).filter((i) => (i.role as string) !== 'talent');
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -160,9 +163,9 @@ export function RemoteSeats() {
               : 'Waiting to pair with the relay — invites open up once the lamp goes green.'}
           </div>
 
-          {desk.invites?.length ? (
+          {deskInvites.length ? (
             <div className="mb-4 flex flex-col gap-1.5">
-              {desk.invites.map((inv) => (
+              {deskInvites.map((inv) => (
                 <div key={inv.code} className="flex items-center gap-2 text-[12px]">
                   <Pill tone={inv.role === 'producer' ? 'pgm' : 'idle'}>{ROLE_LABEL[inv.role]}</Pill>
                   <span className="mono text-brass">{inv.code}</span>
@@ -183,6 +186,8 @@ export function RemoteSeats() {
             </div>
           ) : null}
 
+          <TalentLinks desk={desk} onChange={() => void refresh()} />
+
           <div className="label mb-2">At the desk</div>
           {desk.seats?.length ? (
             <div className="flex flex-col gap-1.5">
@@ -194,7 +199,9 @@ export function RemoteSeats() {
                     title={s.pending ? 'waiting to be admitted' : s.online ? 'connected' : 'has a seat, not connected'}
                   />
                   <span className="ellipsis flex-1 min-w-0">{s.name}</span>
-                  <Pill tone={s.role === 'producer' ? 'pgm' : 'idle'}>{ROLE_LABEL[s.role]}</Pill>
+                  <Pill tone={s.role === 'producer' ? 'pgm' : 'idle'}>
+                    {ROLE_LABEL[s.role] ?? `Talent${(s as { slot?: string }).slot ? ` · ${(s as { slot?: string }).slot}` : ''}`}
+                  </Pill>
                   {s.pending ? (
                     <>
                       <Button size="sm" variant="primary" onClick={() => run(`${s.name} admitted`, () => admitSeat(s.id, true))}>

@@ -64,7 +64,9 @@
     const signalingHost = window.location.host || '127.0.0.1:7700';
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     
-    const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+    // Replaced by the agent's CONFIG message (STUN, plus TURN if the rig has
+    // one) - the same list the talent's page gets. Fallback until then.
+    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     const RETRY_MS = 2000;
     const LOST_MS = 5000;   // 'disconnected' this long with no recovery = the talent is gone
 
@@ -111,7 +113,7 @@
     function initWebRTC(offerSeq) {
       closePeer();
       seq = offerSeq;
-      const p = pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const p = pc = new RTCPeerConnection({ iceServers });
 
       p.ontrack = (event) => {
         console.log('[TALENT-VIEW] Received remote track:', event.track.kind);
@@ -156,7 +158,9 @@
         let msg;
         try { msg = JSON.parse(event.data); } catch { return; }
         try {
-          if (msg.type === 'TALENT_ONLINE') {
+          if (msg.type === 'CONFIG') {
+            if (Array.isArray(msg.iceServers) && msg.iceServers.length) iceServers = msg.iceServers;
+          } else if (msg.type === 'TALENT_ONLINE') {
             console.log('[TALENT-VIEW] Talent online');
           } else if (msg.type === 'TALENT_OFFLINE') {
             console.log('[TALENT-VIEW] Talent offline', msg.graceful ? '(left)' : '(signaling lost)');

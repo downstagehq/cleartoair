@@ -21,6 +21,24 @@ export const SECRET_PATHS = [
   'settings.gsiToken',
   'settings.startggToken',
   'settings.vdo.password',
+  // The talent TURN server (agent/src/talent.js). Its credentials reach a
+  // talent seat only as short-lived ICE config on that seat's own signaling
+  // socket - never through /api/state, the hub, or any other seat.
+  'settings.talent.turn.username',
+  'settings.talent.turn.credential',
+  'settings.talent.turn.secret',
+];
+
+// --- talent seats ------------------------------------------------------------
+// A talent seat is a caster's phone or laptop. It may load the join page and
+// open the signaling socket for the ONE slot its invite was minted for (the
+// binding is kept by remote.js on this PC, never taken from the relay or the
+// page). It reads nothing of the desk: no /api, no hub, no packs, no other
+// overlay, no other slot.
+export const TALENT_PAGE = '/overlays/talent/join.html';
+export const TALENT_SOCKET = '/talent/signaling';
+const TALENT_RULES = [
+  { m: 'GET', re: /^\/overlays\/talent\/join\.html$/ },
 ];
 
 /** Top-level state keys a remote seat may never write, whatever its role.
@@ -110,6 +128,7 @@ export function matchRule(method, pathname) {
 export function allow(seat, method, pathname, { caps = {} } = {}) {
   const role = seat && seat.role;
   if (!role) return { ok: false, status: 401, error: 'no seat' };
+  if (role === 'talent') return allowTalent(seat, method, pathname);
   const rule = matchRule(method, pathname);
   if (!rule) return { ok: false, status: 403, error: `${method} ${pathname} is not available to a remote seat` };
   // A seat held at the door can still ask who it is - that is how the waiting
@@ -124,6 +143,44 @@ export function allow(seat, method, pathname, { caps = {} } = {}) {
       : `${rule.cap} is switched off on the broadcast PC` };
   }
   return { ok: true, rule };
+}
+
+/**
+ * A talent seat's HTTP: the join page, and only once the rig has bound the
+ * seat to a slot (`seat.slot`, filled in by remote.js from its own records).
+ * Separate from RULES on purpose: no shared rule can widen it by accident.
+ */
+export function allowTalent(seat, method, pathname) {
+  if (!seat || seat.role !== 'talent') return { ok: false, status: 403, error: 'not a talent seat' };
+  if (!isSlot(seat.slot)) return { ok: false, status: 403, error: 'this talent link is not bound to a slot on the rig - ask the desk for a fresh one' };
+  const m = String(method || 'GET').toUpperCase();
+  const rule = TALENT_RULES.find((r) => r.m === m && r.re.test(pathname));
+  if (!rule) return { ok: false, status: 403, error: `a talent seat may only open its join page, not ${m} ${pathname}` };
+  return { ok: true, rule };
+}
+
+const isSlot = (v) => typeof v === 'string' && /^caster[1-8]$/.test(v);
+
+/**
+ * May this seat have the tunnelled WebSocket it asked for?
+ *   allowChannel({role:'talent', slot:'caster2'}, '/talent/signaling') -> {ok, kind:'talent', role:'caster', slot:'caster2'}
+ *   allowChannel({role:'producer'}, '/ws')                             -> {ok, kind:'hub'}
+ * A talent seat gets ONLY its bound slot's signaling, always as the caster -
+ * never the hub, never a receiver (which would hand it the OBS side of a call),
+ * and never a slot named by the page. Every other seat gets ONLY the hub.
+ */
+export function allowChannel(seat, path) {
+  const role = seat && seat.role;
+  if (!role) return { ok: false, status: 401, error: 'no seat' };
+  const p = path || '/ws';   // a relay from before the talent path only ever opened /ws
+  if (role === 'talent') {
+    if (p !== TALENT_SOCKET) return { ok: false, status: 403, error: 'a talent seat may only open its own signaling socket' };
+    if (!isSlot(seat.slot)) return { ok: false, status: 403, error: 'this talent link is not bound to a slot on the rig' };
+    return { ok: true, kind: 'talent', role: 'caster', slot: seat.slot };
+  }
+  if (p !== '/ws') return { ok: false, status: 403, error: `a ${role} seat cannot open ${p}` };
+  if (seat.pending) return { ok: false, status: 403, error: 'this seat is still waiting to be admitted at the desk' };
+  return { ok: true, kind: 'hub' };
 }
 
 /** Walk a dot-path and hand back {parent, key} if the whole path exists. */
@@ -233,7 +290,7 @@ export function shotQuery(search) {
 }
 
 export const policy = {
-  SECRET_PATHS, PATCH_DENY, SCORER_PATCH_ALLOW, REMOTE_SHOT_MAX_WIDTH, REMOTE_SHOT_QUALITY,
-  matchRule, allow, allowPatch, allowHubMessage, redactState, patchPaths, shotQuery,
+  SECRET_PATHS, PATCH_DENY, SCORER_PATCH_ALLOW, REMOTE_SHOT_MAX_WIDTH, REMOTE_SHOT_QUALITY, TALENT_PAGE, TALENT_SOCKET,
+  matchRule, allow, allowTalent, allowChannel, allowPatch, allowHubMessage, redactState, patchPaths, shotQuery,
 };
 export default policy;

@@ -439,6 +439,57 @@ for (const name of ADAPTERS) {
   }
 }
 
+// ---- observer PC: GSI from the LAN by allow-list (_lan.js) -----------------------------------
+{
+  console.log('\n== observer PC (LAN) ==');
+  const lanMod = await import('./_lan.js');
+  const { normalizeIp, isLoopback, parseAllow, lanConfig, admit, observerCfg, lanAddresses, MAX_ALLOW } = lanMod;
+  const { createGsiServer } = await import('./_gsi.js');
+  ok(normalizeIp('::ffff:192.168.1.20') === '192.168.1.20' && normalizeIp(' 10.0.0.5 ') === '10.0.0.5' && normalizeIp('nope') === '' && normalizeIp('[::1]') === '::1', 'normalizeIp: IPv4-mapped, spaces, brackets, junk');
+  ok(isLoopback('127.0.0.1') && isLoopback('::ffff:127.0.0.1') && isLoopback('::1') && !isLoopback('192.168.1.20'), 'loopback in all its spellings');
+  const pa = parseAllow('192.168.1.20, 192.168.1.20\n10.0.0.0/24 127.0.0.1 0.0.0.0 bogus 10.0.0.7');
+  ok(pa.allow.join() === '192.168.1.20,10.0.0.7' && pa.rejected.map((r) => r.value).join() === '10.0.0.0/24,127.0.0.1,0.0.0.0,bogus' && /ranges/.test(pa.rejected[0].reason),
+    `allow-list: exact addresses only, deduped; a range, loopback, 0.0.0.0 and junk are refused with a reason (${pa.rejected.map((r) => r.reason).join(' | ')})`);
+  ok(parseAllow(Array.from({ length: 20 }, (_, i) => `10.0.1.${i + 1}`)).allow.length === MAX_ALLOW, `at most ${MAX_ALLOW} observer PCs`);
+  ok(!lanConfig({ settings: { gsiLan: { enabled: 'yes', allow: ['10.0.0.7'] } } }).enabled && !lanConfig({}).enabled && !lanConfig(null).enabled
+    && lanConfig({ settings: { gsiLan: { enabled: true, allow: ['10.0.0.7', '10.0.0.0/8'] } } }).allow.join() === '10.0.0.7', 'stored garbage can only mean off; a stored range is dropped, not widened');
+  const on = { enabled: true, allow: ['192.168.1.20'] };
+  ok(admit('127.0.0.1', { enabled: false, allow: [] }).ok && admit('::ffff:192.168.1.20', on).ok && !admit('192.168.1.21', on).ok && admit('192.168.1.21', on).status === 403
+    && !admit('192.168.1.20', { enabled: false, allow: ['192.168.1.20'] }).ok && !admit('', on).ok, 'admit: loopback always; LAN only with the switch on AND the exact address listed');
+  const cfgText = (await import('./cs2gsi.js')).install({ config: {}, getState }).files[0].content;
+  ok(/"uri"\s+"http:\/\/192\.168\.1\.10:7701\/"/.test(observerCfg(cfgText, '192.168.1.10', 7701)) && observerCfg(cfgText, '192.168.1.10', 7701).includes('"token"'), "observer cfg: same file, uri pointed at the rig's LAN address, token kept");
+  const ifs = lanAddresses({ eth: [{ family: 'IPv4', address: '192.168.1.10', internal: false }, { family: 'IPv6', address: 'fe80::1', internal: false }], lo: [{ family: 4, address: '127.0.0.1', internal: true }], apipa: [{ family: 'IPv4', address: '169.254.3.3', internal: false }] });
+  ok(ifs.length === 1 && ifs[0].address === '192.168.1.10', 'rig addresses: LAN IPv4 only (no loopback, IPv6 link-local or APIPA)');
+
+  // A receiver with LAN off binds loopback only, and says so.
+  let lanSetting = { enabled: false, allow: [] };
+  const srv = createGsiServer({ port: 7791, tag: 'lan-test', log: () => {}, getToken: () => 'tok', onPayload: () => {}, getLan: () => lanSetting });
+  await srv.start();
+  ok(srv.lan().boundHost === '127.0.0.1' && (await post(7791, { auth: { token: 'tok' } })) === 200, 'LAN off: bound to 127.0.0.1, loopback payloads still accepted');
+  await srv.stop();
+  ok(srv.lan().boundHost === null && await portFree(7791), 'stop releases the port and clears the bind');
+
+  // Binding every interface makes Windows ask about the firewall, so the real LAN test is opt-in.
+  const lanIp = lanAddresses()[0]?.address;
+  if (process.env.CTA_TEST_LAN === '1' && lanIp) {
+    const postFrom = (port, body, localAddress, host) => new Promise((resolve) => {
+      const req = http.request({ host, port, method: 'POST', path: '/', localAddress, headers: { 'Content-Type': 'application/json' } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+      req.on('error', (e) => resolve(e.code)); req.end(JSON.stringify(body));
+    });
+    let got = 0;
+    lanSetting = { enabled: true, allow: [] };
+    const s2 = createGsiServer({ port: 7791, tag: 'lan-test', log: () => {}, getToken: () => 'tok', onPayload: () => { got++; }, getLan: () => lanSetting });
+    await s2.start();
+    const refusedCode = await postFrom(7791, { auth: { token: 'tok' } }, lanIp, lanIp);
+    lanSetting = { enabled: true, allow: [lanIp] };
+    const okCode = await postFrom(7791, { auth: { token: 'tok' } }, lanIp, lanIp);
+    const badTok = await postFrom(7791, { auth: { token: 'nope' } }, lanIp, lanIp);
+    ok(s2.lan().boundHost === '0.0.0.0' && refusedCode === 403 && okCode === 200 && badTok === 401 && got === 1 && s2.lan().refused[0]?.ip === lanIp,
+      `LAN on (real bind, from ${lanIp}): 403 until listed, then 200; the token is still checked (401); refusals are recorded (${refusedCode}/${okCode}/${badTok})`);
+    await s2.stop();
+  } else console.log(`   SKIP real LAN bind (set CTA_TEST_LAN=1 to run it${lanIp ? '' : '; no LAN address on this PC'})`);
+}
+
 // ---- replay fixtures (fixtures/*.jsonl, the "Record raw game data" format) ------------------
 // Every capture in fixtures/ is replayed through the adapter's own parser and checked against
 // its .expect.json. A real capture dropped in with an expectation joins this run by itself.

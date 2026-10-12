@@ -12,6 +12,10 @@
 //   node tools/bench/talent-bench.mjs                 full bench, spawns its own agent
 //   node tools/bench/talent-bench.mjs --port 7790     another port for that agent
 //   node tools/bench/talent-bench.mjs --no-agent      use an agent already on --port
+//   node tools/bench/talent-bench.mjs --relay         the talent over the room relay: the
+//        real relay Worker + room run locally (relay/test/harness.mjs), the talent opens
+//        its invite link on the relay origin, OBS's view.html stays local on the rig,
+//        and the relay/rig sockets are dropped mid-call. Nothing is deployed.
 //   node tools/bench/talent-bench.mjs --watch caster1 receiver only: open view.html in a
 //        headless Chrome against a running agent and print its getStats() every 2 s
 //        (for a two-device test - the talent joins from the other device).
@@ -43,6 +47,7 @@ function arg(name, def) {
 const PORT = Number(arg('--port', 7700));
 const SPAWN_AGENT = !arg('--no-agent', false);
 const WATCH = arg('--watch', null);
+const RELAY = !!arg('--relay', false);
 const CHROME = arg('--chrome', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 const SCRATCH = path.resolve(String(arg('--scratch', path.join(os.tmpdir(), 'claude', 'talent-bench'))));
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -209,8 +214,7 @@ function waitExit(child, ms) {
 }
 
 let agentLogStream = null;
-async function startAgent() {
-  const dataDir = path.join(SCRATCH, 'agent-data');
+async function startAgent({ dataDir = path.join(SCRATCH, 'agent-data') } = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   if (!agentLogStream) agentLogStream = fs.createWriteStream(path.join(SCRATCH, 'agent.log'), { flags: 'a' });
   const env = { ...process.env }; delete env.CTA_PORT; delete env.CTA_ALLOW_ORIGINS;
@@ -225,7 +229,7 @@ async function startAgent() {
   const child = spawn(process.execPath, [path.join(ROOT, 'agent', 'src', 'index.js'), '--port', String(PORT), '--data-dir', dataDir],
     { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   child.stdout.pipe(agentLogStream, { end: false }); child.stderr.pipe(agentLogStream, { end: false });
-  const entry = { name: 'agent', child }; procs.push(entry);
+  const entry = { name: 'agent', child, dataDir }; procs.push(entry);
   await httpOk(`${BASE}/healthz`);
   return entry;
 }
@@ -572,6 +576,140 @@ async function bench() {
   await rxO.close(); await tal7.close();
 }
 
+// ------------------------------------------------------------ over the relay
+// The talent's page and signaling come through the room relay (the real
+// relay/src/worker.js + room.js on the Node harness, on this PC); the OBS side
+// is the rig's own view.html on 127.0.0.1. Media is WebRTC between the two
+// Chromes - the relay only ever carries signaling.
+let harness = null;
+async function relayBench() {
+  const { pathToFileURL } = await import('node:url');
+  const { startHarness } = await import(pathToFileURL(path.join(ROOT, 'relay', 'test', 'harness.mjs')).href);
+  const { randomId } = await import(pathToFileURL(path.join(ROOT, 'relay', 'src', 'protocol.js')).href);
+  harness = await startHarness({ port: Number(arg('--relay-port', 8790)) });
+  const RELAY_URL = harness.url;
+
+  // The rig, paired with that relay - what the Remote panel writes when switched on.
+  const dataDir = path.join(SCRATCH, 'agent-data-relay');
+  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.mkdirSync(dataDir, { recursive: true });
+  const room = randomId(16);
+  fs.writeFileSync(path.join(dataDir, 'remote.json'), JSON.stringify({ enabled: true, relayUrl: RELAY_URL, room, key: randomId(32), caps: { streamControl: false }, requireAdmit: true }, null, 2));
+  let agent = await startAgent({ dataDir });
+  const api = async (p, body) => {
+    const r = await fetch(`${BASE}${p}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return r.json();
+  };
+  const paired = async () => { try { return (await api('/api/remote')).connected === true; } catch { return false; } };
+  const waitPaired = async (ms = 20000) => { const end = now() + ms; while (now() < end) { if (await paired()) return true; await sleep(250); } return false; };
+  if (!(await waitPaired())) throw new Error('the agent never paired with the local relay');
+  console.log(`agent ${BASE} paired with relay ${RELAY_URL} (room ${room.slice(0, 6)}...)`);
+
+  const inv = await api('/api/remote/talent-invite', { slot: 'caster1', name: 'Riley' });
+  if (!inv.ok) throw new Error(`talent invite: ${inv.error}`);
+
+  const talentChrome = await launchChrome('talent-relay');
+  const rxChrome = await launchChrome('receiver-relay', ['--autoplay-policy=no-user-gesture-required']);
+  console.log(`chrome: ${talentChrome.version}`);
+
+  const rx = await openTab(rxChrome, 'rx', `${BASE}/overlays/talent/view.html?slot=caster1`);
+  await waitFor(rx, `(window.__ev || []).some((e) => e.ev === 'ws-open')`);
+
+  // The talent opens the invite link ON THE RELAY ORIGIN (?auto= is the
+  // harness's one-navigation stand-in for typing a name and pressing the button).
+  const talent = await openTab(talentChrome, 'talent', `${inv.link}?auto=Riley`);
+  await waitFor(talent, `typeof localStream !== 'undefined' && !!localStream && localStream.getTracks().length === 2`, 20000);
+  const where = await talent.eval(`({ href: location.href, secure: window.isSecureContext })`);
+  let t0 = await goLive(talent);
+  let f = await waitFlowing(rx, 25000);
+  await sleep(1000);
+  let s = await stats(rx);
+  const ts = await stats(talent);
+  const badge = () => talent.eval(`document.getElementById('status-badge').textContent + ' ' + document.getElementById('slot-label').textContent`);
+  const tWs = async (since) => (await events(talent, since)).filter((e) => e.ev.startsWith('ws-') && e.type !== 'candidate').map((e) => e.ev + (e.type ? ':' + e.type : '') + (e.code ? ':' + e.code : '') + (e.reason ? ':' + e.reason : ''));
+  record('R-A. talent on the relay origin, OBS view.html local: media flows', f.ok && where.href.startsWith(RELAY_URL) && where.secure, {
+    talentPage: where.href.replace(room, '<room>'), secureContext: where.secure, badge: await badge(),
+    timing: timing(await events(rx, t0), t0), flow: { videoKbps: f.videoKbps, audioKbps: f.audioKbps, fps: f.fps },
+    receiver: { conn: s.conn, pair: s.pair, video: s.video && { paused: s.video.paused, w: s.video.w, h: s.video.h } },
+    talent: { conn: ts.conn, pair: ts.pair, outbound: ts.outbound && { video: ts.outbound.video && ts.outbound.video.codec, audio: ts.outbound.audio && ts.outbound.audio.codec } },
+    signalingVia: (await events(talent, t0)).find((e) => e.ev === 'ws-new')?.url,
+    hub: (await api('/api/talent')).slots,
+  });
+
+  // R-B. The relay drops the talent's socket (Cloudflare eviction / redeploy).
+  let pcs = (await stats(rx)).pcCount;
+  let tX = now();
+  harness.dropClients(room);
+  await sleep(800);
+  const midB = await flowing(rx, 1500);
+  const backB = await waitFor(talent, `document.getElementById('status-badge').textContent.startsWith('CONNECTED')`, 15000);
+  const afterB = await flowing(rx, 1500);
+  record('R-B. relay drops the talent socket mid-call', midB.ok && backB && afterB.ok, {
+    mediaWhileSocketDown: { ok: midB.ok, videoKbps: midB.videoKbps }, talentBackOnline: backB, badge: await badge(),
+    mediaAfter: { ok: afterB.ok, videoKbps: afterB.videoKbps }, renegotiated: (await stats(rx)).pcCount > pcs ? 'yes' : 'no - the same call carried on',
+    talentWs: await tWs(tX),
+  });
+
+  // R-C. The relay drops the RIG's socket: every hosted socket goes until the agent redials.
+  pcs = (await stats(rx)).pcCount;
+  tX = now();
+  harness.dropAgent(room);
+  await sleep(800);
+  const midC = await flowing(rx, 1500);
+  const repaired = await waitPaired(15000);
+  const backC = await waitFor(talent, `document.getElementById('status-badge').textContent.startsWith('CONNECTED')`, 20000);
+  const afterC = await flowing(rx, 1500);
+  record('R-C. relay drops the rig socket (rig reconnect)', midC.ok && repaired && backC && afterC.ok, {
+    mediaWhileRigOff: { ok: midC.ok, videoKbps: midC.videoKbps }, agentRedialed: repaired, talentBackOnline: backC, badge: await badge(),
+    mediaAfter: { ok: afterC.ok, videoKbps: afterC.videoKbps }, renegotiated: (await stats(rx)).pcCount > pcs ? 'yes' : 'no - the same call carried on',
+    talentWs: await tWs(tX),
+  });
+
+  // R-D. The agent process restarts (update, crash): the talent's seat and slot
+  // binding are in remote.json, so it comes back to the same slot.
+  pcs = (await stats(rx)).pcCount;
+  tX = now();
+  await stopAgent(agent);
+  await sleep(1000);
+  const midD = await flowing(rx, 1500);
+  agent = await startAgent({ dataDir });
+  const repairedD = await waitPaired(20000);
+  const backD = await waitFor(talent, `document.getElementById('status-badge').textContent.startsWith('CONNECTED')`, 20000);
+  await sleep(2500);   // view.html redials every 2 s
+  const afterD = await flowing(rx, 1500);
+  record('R-D. agent restarts mid-call (talent over the relay)', midD.ok && repairedD && backD && afterD.ok, {
+    mediaWhileAgentDown: { ok: midD.ok, videoKbps: midD.videoKbps }, agentRepaired: repairedD, talentBackOnline: backD, badge: await badge(),
+    mediaAfter: { ok: afterD.ok, videoKbps: afterD.videoKbps }, renegotiated: (await stats(rx)).pcCount > pcs ? 'yes' : 'no - the same call carried on',
+    hub: (await api('/api/talent')).slots,
+  });
+
+  // R-E. OBS refreshes its source: RENEGOTIATE goes up the relay to the phone.
+  tX = now();
+  await rx.reload();
+  const fE = await waitFlowing(rx, 15000);
+  record('R-E. receiver reload with the talent on the relay (RENEGOTIATE through the tunnel)', fE.ok, {
+    timingFromReload: timing(await events(rx, 0), tX), flow: { videoKbps: fE.videoKbps, audioKbps: fE.audioKbps },
+    talentWs: await tWs(tX),
+  });
+
+  // R-F. The desk closes the talent's seat: the page stops (LINK CLOSED), the OBS side clears.
+  const seatId = ((await api('/api/remote')).seats || []).find((x) => x.role === 'talent')?.id;
+  tX = now();
+  await api('/api/remote/kick', { seat: seatId });
+  const closed = await waitFor(talent, `document.getElementById('status-badge').textContent === 'LINK CLOSED' && !isLive`, 10000);
+  const rxCleared = await waitFor(rx, `document.getElementById('status-offline').style.display === 'flex'`, 20000);
+  const clearedMs = now() - tX;
+  await sleep(RETRY_GRACE_MS);
+  const retried = (await events(talent, tX)).filter((e) => e.ev === 'ws-new').length;
+  const pageAfter = await fetch(`${RELAY_URL}/overlays/talent/join.html`).then((r) => r.status).catch(() => 0);
+  record('R-F. desk closes the talent seat', closed && rxCleared && retried === 0, {
+    talentShowsLinkClosed: closed, talentRetried: retried, receiverCleared: rxCleared, receiverClearedAfterMs: clearedMs,
+    pageWithoutCookie: pageAfter,
+  });
+
+  await talent.close(); await rx.close();
+}
+
 async function watch(slot) {
   await httpOk(`${BASE}/healthz`);
   const c = await launchChrome('watch', ['--autoplay-policy=no-user-gesture-required']);
@@ -596,8 +734,8 @@ process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
 try {
   if (WATCH) await watch(WATCH === true ? 'caster1' : WATCH);
   else {
-    await bench();
-    const out = path.join(SCRATCH, 'results.json');
+    await (RELAY ? relayBench() : bench());
+    const out = path.join(SCRATCH, RELAY ? 'results-relay.json' : 'results.json');
     fs.writeFileSync(out, JSON.stringify(results, null, 2));
     console.log('\n==== summary ====');
     for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`);
@@ -608,6 +746,7 @@ try {
   exitCode = 1;
 } finally {
   await cleanup();
+  if (harness) { try { harness.close(); } catch { /* gone */ } }
   if (agentLogStream) agentLogStream.end();
 }
 process.exit(exitCode);

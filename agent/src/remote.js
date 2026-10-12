@@ -28,13 +28,23 @@ import { DATA_DIR } from './config.js';
 import { log } from './log.js';
 import policy from './remote-policy.js';
 import {
-  MAX_REQ_BODY_BYTES, MAX_RES_BODY_BYTES, PROTOCOL_VERSION,
-  decodeFrame, encodeFrame, isRole, makeCode, randomId, INVITE_TTL_MS, needsAdmit,
+  MAX_REQ_BODY_BYTES, MAX_RES_BODY_BYTES, PROTOCOL_VERSION, SEAT_TTL_MS, TALENT_INVITE_TTL_MS,
+  decodeFrame, encodeFrame, isRole, isTalentSlot, makeCode, normalizeCode, randomId, INVITE_TTL_MS, needsAdmit,
 } from '../../relay/src/protocol.js';
 
 const FILE = path.join(DATA_DIR, 'remote.json');
 const RECONNECT_MS = [1000, 2000, 4000, 8000, 15000, 30000];
 const HEARTBEAT_MS = 25000;
+
+// Headers on everything a talent seat is served: the page must not be framed
+// by another site (clickjacking a camera prompt), and nothing is cached on a
+// borrowed phone.
+const TALENT_PAGE_HEADERS = {
+  'x-frame-options': 'DENY',
+  'content-security-policy': "frame-ancestors 'none'",
+  'referrer-policy': 'no-referrer',
+  'permissions-policy': 'camera=(self), microphone=(self), screen-wake-lock=(self)',
+};
 
 const DEFAULTS = {
   enabled: false,
@@ -45,16 +55,26 @@ const DEFAULTS = {
   key: '',
   caps: { streamControl: false },
   requireAdmit: true,
+  // Talent links: which slot each one is for. Kept HERE, on the rig, so a
+  // talent seat's slot is never something the relay or the page can name.
+  // Persisted so a link minted before an agent restart still works after it.
+  talentInvites: {},   // code -> { slot, name, exp }
+  talentSeats: {},     // seatId -> { slot, name, exp }
 };
 
 export function loadConfig(file = FILE) {
   let raw = {};
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* first run */ }
   const env = process.env.CTA_RELAY_URL || '';
+  const now = Date.now();
+  const live = (m) => Object.fromEntries(Object.entries(m && typeof m === 'object' ? m : {})
+    .filter(([, v]) => v && isTalentSlot(v.slot) && Number(v.exp) > now));
   return {
     ...DEFAULTS, ...raw,
     caps: { ...DEFAULTS.caps, ...(raw.caps || {}) },
     relayUrl: String(raw.relayUrl || env || '').trim().replace(/\/+$/, ''),
+    talentInvites: live(raw.talentInvites),
+    talentSeats: live(raw.talentSeats),
   };
 }
 
@@ -136,13 +156,33 @@ export function createRemote(ctx) {
   let connected = false;
   let lastError = '';
   let seats = [];
-  const invites = new Map();            // code -> {role, exp, uses, link}
-  const channels = new Map();           // ch -> { seat, client }
+  const invites = new Map();            // code -> {role, exp, uses, link, slot?}
+  const channels = new Map();           // ch -> { seat, client, kind }
+  // Talent links minted before a restart come back (the relay still holds them).
+  for (const [code, t] of Object.entries(cfg.talentInvites || {})) {
+    invites.set(code, { role: 'talent', slot: t.slot, name: t.name || '', exp: t.exp, uses: 1, link: relayUrls(cfg.relayUrl, cfg.room).join(code) });
+  }
 
   const announce = () => {
     // The local control room sees seats appear, knock and leave.
     if (ctx.hub) ctx.hub.broadcast('remote', status());
   };
+
+  /** The slot this rig bound a talent seat to, or null. Never the page's word. */
+  function talentSlot(seatId) {
+    const b = cfg.talentSeats && cfg.talentSeats[seatId];
+    if (!b) return null;
+    if (Number(b.exp) <= Date.now()) { delete cfg.talentSeats[seatId]; saveConfig(cfg); return null; }
+    return isTalentSlot(b.slot) ? b.slot : null;
+  }
+
+  function persistTalent() {
+    const now = Date.now();
+    cfg.talentInvites = {};
+    for (const [code, i] of invites) if (i.role === 'talent' && i.exp > now) cfg.talentInvites[code] = { slot: i.slot, name: i.name || '', exp: i.exp };
+    for (const [id, b] of Object.entries(cfg.talentSeats || {})) if (!(Number(b.exp) > now)) delete cfg.talentSeats[id];
+    saveConfig(cfg);
+  }
 
   function status() {
     const urls = relayUrls(cfg.relayUrl, cfg.room);
@@ -156,10 +196,24 @@ export function createRemote(ctx) {
       caps: { ...cfg.caps },
       requireAdmit: !!cfg.requireAdmit,
       error: lastError || '',
-      seats: seats.map((s) => ({ ...s })),
-      invites: [...invites.entries()].map(([code, i]) => ({ code, role: i.role, exp: i.exp, uses: i.uses, link: i.link })),
+      seats: seats.map((s) => (s.role === 'talent' ? { ...s, slot: talentSlot(s.id) } : { ...s })),
+      invites: [...invites.entries()].map(([code, i]) => ({ code, role: i.role, exp: i.exp, uses: i.uses, link: i.link, ...(i.slot ? { slot: i.slot, name: i.name || '' } : {}) })),
       channels: channels.size,
     };
+  }
+
+  /** A talent seat the rig has no binding for (a forged or stale join): out. */
+  function dropUnboundTalent(list) {
+    const keep = [];
+    for (const s of list) {
+      if (s && s.role === 'talent' && !talentSlot(s.id)) {
+        log.warn('remote', `closing talent seat "${s.name}" - this rig never bound it to a slot`);
+        send({ t: 'kick', seat: s.id });
+        continue;
+      }
+      keep.push(s);
+    }
+    return keep;
   }
 
   // --- the socket ------------------------------------------------------------
@@ -221,22 +275,42 @@ export function createRemote(ctx) {
   async function onFrame(msg) {
     if (!msg) return;
     switch (msg.t) {
-      case 'ready': seats = Array.isArray(msg.seats) ? msg.seats : []; announce(); return;
-      case 'seats': seats = Array.isArray(msg.seats) ? msg.seats : []; announce(); return;
+      case 'ready': seats = dropUnboundTalent(Array.isArray(msg.seats) ? msg.seats : []); announce(); return;
+      case 'seats': seats = dropUnboundTalent(Array.isArray(msg.seats) ? msg.seats : []); announce(); return;
       case 'req': return void handleRequest(msg);
       case 'open': return void openChannel(msg);
       case 'frame': {
         const c = channels.get(msg.c);
-        if (c) c.client.deliver(String(msg.d || ''));
+        // The room stamps every frame with its seat; a frame claiming another
+        // seat than the one the channel was opened for goes nowhere.
+        if (c && (!msg.seat || msg.seat.id === c.seat.id)) c.client.deliver(String(msg.d || ''));
         return;
       }
       case 'close': return void closeChannel(msg.c);
       case 'join': {
-        const seat = msg.seat || {};
+        const seat = { ...(msg.seat || {}) };
+        const code = String(seat.code || '');
+        delete seat.code;
+        if (seat.role === 'talent') {
+          // The slot comes from the invite THIS rig minted, looked up by code
+          // (the room hands it back normalised: no dash, upper case).
+          const key = [...invites.keys()].find((k) => normalizeCode(k) === normalizeCode(code));
+          const inv = key ? invites.get(key) : null;
+          if (!inv || inv.role !== 'talent' || !isTalentSlot(inv.slot)) {
+            log.warn('remote', `a talent seat joined on a code this rig did not mint for talent - closing it`);
+            send({ t: 'kick', seat: seat.id });
+            return;
+          }
+          cfg.talentSeats[seat.id] = { slot: inv.slot, name: seat.name || inv.name || '', exp: Date.now() + SEAT_TTL_MS };
+          invites.delete(key);       // single use: spent now
+          persistTalent();
+          log.info('remote', `${seat.name} opened the talent link for ${inv.slot}`);
+        } else {
+          log.info('remote', seat.pending
+            ? `${seat.name} is at the door for a ${seat.role} seat - admit them in Setup`
+            : `${seat.name} took a ${seat.role} seat`);
+        }
         seats = [...seats.filter((s) => s.id !== seat.id), { ...seat, online: false }];
-        log.info('remote', seat.pending
-          ? `${seat.name} is at the door for a ${seat.role} seat - admit them in Setup`
-          : `${seat.name} took a ${seat.role} seat`);
         announce();
         return;
       }
@@ -246,7 +320,19 @@ export function createRemote(ctx) {
         return;
       }
       case 'revoked': return void announce();
-      case 'err': lastError = String(msg.m || ''); log.warn('remote', lastError); return;
+      case 'err': {
+        lastError = String(msg.m || '');
+        // A relay from before 0.3.3 does not know the talent role: the link the desk is showing
+        // would not open. Withdraw talent links and say what to do, instead of a log line.
+        if (/unknown role "talent"/.test(lastError)) {
+          for (const [c, i] of [...invites]) if (i.role === 'talent') invites.delete(c);
+          persistTalent();
+          lastError = 'this relay is older than 0.3.3 and cannot carry talent links - update the relay (relay/README.md); desk seats are not affected';
+        }
+        log.warn('remote', lastError);
+        announce();
+        return;
+      }
       default: return;
     }
   }
@@ -255,7 +341,10 @@ export function createRemote(ctx) {
 
   async function handleRequest(msg) {
     const id = msg.i;
-    const seat = msg.seat || null;
+    // A talent seat carries the slot THIS rig bound it to - whatever the page
+    // or the relay might say.
+    const stamped = msg.seat || null;
+    const seat = stamped && stamped.role === 'talent' ? { ...stamped, slot: talentSlot(stamped.id) } : stamped;
     const method = String(msg.m || 'GET').toUpperCase();
     const pathname = String(msg.p || '/');
     const reply = (status, obj) => send({ t: 'res', i: id, s: status, h: { 'content-type': 'application/json; charset=utf-8' }, b: JSON.stringify(obj) });
@@ -308,8 +397,16 @@ export function createRemote(ctx) {
       log.error('remote', `${method} ${pathname}: ${e.message}`);
       if (!res.writableEnded) res.end(JSON.stringify({ ok: false, error: e.message }));
     }
-    if (!res.writableEnded) res.end();
-    const out = await res.done;
+    // A static file (a pack logo, the talent page) is answered by an fs.stat
+    // and a stream pipe that finish AFTER the handler has returned. Ending the
+    // response here at once sent those down the tunnel empty; wait for the pipe,
+    // and only cut a handler off that never answers at all.
+    let cutOff = null;
+    const out = await Promise.race([
+      res.done,
+      new Promise((resolve) => { cutOff = setTimeout(() => { if (!res.writableEnded) res.end(); resolve(null); }, 15000); }),
+    ]) || await res.done;
+    clearTimeout(cutOff);
 
     let body = out.body;
     const type = String(out.headers['content-type'] || 'application/octet-stream');
@@ -325,7 +422,7 @@ export function createRemote(ctx) {
     const isText = TEXT_TYPES.test(type);
     send({
       t: 'res', i: id, s: out.status,
-      h: { 'content-type': type, ...(out.headers['content-length'] ? {} : {}) },
+      h: { 'content-type': type, ...(seat.role === 'talent' ? TALENT_PAGE_HEADERS : {}) },
       b: isText ? body.toString('utf8') : body.toString('base64'),
       b64: !isText,
     });
@@ -333,11 +430,35 @@ export function createRemote(ctx) {
 
   // --- a tunnelled WebSocket ------------------------------------------------
 
+  function refuseChannel(ch, seat, why) {
+    log.warn('remote', `refused a socket for ${seat.name || 'a seat'} (${seat.role || '?'}): ${why}`);
+    send({ t: 'close', c: ch, code: 4003, reason: 'not allowed' });
+  }
+
   function openChannel(msg) {
     const ch = msg.c;
-    const seat = msg.seat || {};
+    const stamped = msg.seat || {};
+    const seat = stamped.role === 'talent' ? { ...stamped, slot: talentSlot(stamped.id) } : stamped;
     if (channels.has(ch)) closeChannel(ch);
     if (!ctx.hub) return;
+
+    const verdict = policy.allowChannel(seat, msg.p);
+    if (!verdict.ok) return refuseChannel(ch, seat, verdict.error);
+
+    if (verdict.kind === 'talent') {
+      // One slot's signaling, as its caster. Media goes peer to peer; only the
+      // offer/answer/candidates come through here.
+      if (!ctx.hub.talent || !ctx.hub.talent.attach) return refuseChannel(ch, seat, 'no talent hub in this process');
+      const client = ctx.hub.talent.attach({
+        send: (text) => send({ t: 'frame', c: ch, d: text }),
+        close: (code, reason) => { send({ t: 'close', c: ch, code, reason }); closeChannel(ch); },
+      }, { slot: verdict.slot, who: String(seat.id || 'seat') });
+      channels.set(ch, { seat, client, kind: 'talent' });
+      seats = seats.map((s) => (s.id === seat.id ? { ...s, online: true } : s));
+      announce();
+      return;
+    }
+
     const client = ctx.hub.attach(
       {
         send: (text) => send({ t: 'frame', c: ch, d: text }),
@@ -358,16 +479,17 @@ export function createRemote(ctx) {
         guard: (m) => policy.allowHubMessage(seat, m, { caps: cfg.caps }),
       },
     );
-    channels.set(ch, { seat, client });
+    channels.set(ch, { seat, client, kind: 'hub' });
     seats = seats.map((s) => (s.id === seat.id ? { ...s, online: true } : s));
     announce();
   }
 
-  function closeChannel(ch) {
+  /** opts.graceful: the desk closed it on purpose - the OBS side can clear at once. */
+  function closeChannel(ch, opts) {
     const c = channels.get(ch);
     if (!c) return;
     channels.delete(ch);
-    c.client.detach();
+    c.client.detach(opts);
     seats = seats.map((s) => (s.id === c.seat.id ? { ...s, online: false } : s));
     announce();
   }
@@ -404,6 +526,7 @@ export function createRemote(ctx) {
   function invite({ role = 'viewer', name = '', uses = 1, ttlMs = INVITE_TTL_MS } = {}) {
     if (!cfg.enabled) throw Object.assign(new Error('switch remote seats on first'), { status: 409 });
     if (!connected) throw Object.assign(new Error('not paired with the relay yet'), { status: 503 });
+    if (role === 'talent') throw Object.assign(new Error('a talent link is bound to a slot - use the talent invite'), { status: 400 });
     if (!isRole(role)) throw Object.assign(new Error(`role must be one of producer, scorer, viewer`), { status: 400 });
     const code = makeCode();
     const exp = Date.now() + Math.max(60000, Math.min(12 * 3600 * 1000, Number(ttlMs) || INVITE_TTL_MS));
@@ -416,9 +539,32 @@ export function createRemote(ctx) {
     return { ok: true, code, role, exp, uses: n, link, needsAdmit: needsAdmit(role) && cfg.requireAdmit };
   }
 
+  /**
+   * A caster's camera link, bound to ONE slot (caster1..caster8). Single use and
+   * short-lived: it is sent, opened, and spent. The slot is recorded here and
+   * nowhere else - the relay stores the code as a 'talent' invite and nothing
+   * more, and the page's own ?slot= is ignored for a talent seat.
+   */
+  function talentInvite({ slot, name = '', ttlMs = TALENT_INVITE_TTL_MS } = {}) {
+    if (!cfg.enabled) throw Object.assign(new Error('switch remote seats on first'), { status: 409 });
+    if (!connected) throw Object.assign(new Error('not paired with the relay yet'), { status: 503 });
+    if (!isTalentSlot(slot)) throw Object.assign(new Error('slot must be caster1 to caster8'), { status: 400 });
+    const code = makeCode();
+    const exp = Date.now() + Math.max(2 * 60000, Math.min(60 * 60000, Number(ttlMs) || TALENT_INVITE_TTL_MS));
+    const link = relayUrls(cfg.relayUrl, cfg.room).join(code);
+    const who = String(name || '').slice(0, 24);
+    invites.set(code, { role: 'talent', slot, name: who, exp, uses: 1, link });
+    persistTalent();
+    send({ t: 'invite', code, role: 'talent', exp, uses: 1, name: who, admit: false });
+    log.info('remote', `talent link for ${slot}${who ? ` (${who})` : ''}: ${code} (expires ${new Date(exp).toLocaleTimeString()})`);
+    announce();
+    return { ok: true, code, role: 'talent', slot, name: who, exp, uses: 1, link };
+  }
+
   function revoke(code) {
     if (!code) { invites.clear(); send({ t: 'revoke', all: true }); }
     else { invites.delete(code); send({ t: 'revoke', code }); }
+    persistTalent();
     announce();
     return { ok: true };
   }
@@ -432,8 +578,13 @@ export function createRemote(ctx) {
   }
 
   function kick(seatId) {
-    if (seatId === '*') { send({ t: 'kick', all: true }); seats = []; log.info('remote', 'all remote seats closed'); }
-    else { send({ t: 'kick', seat: seatId }); seats = seats.filter((s) => s.id !== seatId); log.info('remote', `seat ${seatId} closed`); }
+    // Close our end of the seat's sockets too, rather than wait for the relay.
+    for (const [ch, c] of [...channels]) {
+      if (seatId === '*' || c.seat.id === seatId) { send({ t: 'close', c: ch, code: 4003, reason: 'seat closed at the desk' }); closeChannel(ch, { graceful: true }); }
+    }
+    if (seatId === '*') { send({ t: 'kick', all: true }); seats = []; cfg.talentSeats = {}; log.info('remote', 'all remote seats closed'); }
+    else { send({ t: 'kick', seat: seatId }); seats = seats.filter((s) => s.id !== seatId); delete cfg.talentSeats[seatId]; log.info('remote', `seat ${seatId} closed`); }
+    persistTalent();
     announce();
     return { ok: true };
   }
@@ -452,7 +603,7 @@ export function createRemote(ctx) {
 
   function close() { closed = true; stop('agent stopping'); }
 
-  return { start, close, status, enable, setCaps, invite, revoke, admit, kick, get config() { return { ...cfg }; } };
+  return { start, close, status, enable, setCaps, invite, talentInvite, revoke, admit, kick, talentSlot, get config() { return { ...cfg }; } };
 }
 
 export default createRemote;

@@ -15,11 +15,13 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startHarness } from './harness.mjs';
 import { randomId, SEAT_COOKIE } from '../src/protocol.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const { WebSocket } = createRequire(path.join(ROOT, 'agent', 'package.json'))('ws');
 const PORT = 7793;
 
 let failures = 0;
@@ -136,6 +138,12 @@ try {
   eq(remoteState.settings.startggToken, '', 'nor is the start.gg token');
   eq(remoteState.settings.gsiToken, '', 'nor is the GSI token');
   ok((remoteState.__remote.redacted || []).includes('settings.obsPassword'), 'and it is told what was held back, so the UI can say "set on the rig"');
+  // A file the agent streams (fs.stat + pipe) used to come down the tunnel empty:
+  // the response was ended as soon as the handler returned, before the pipe ran.
+  const packFile = path.join(ROOT, 'packs', 'valorant', 'overlay', 'ingame.html');
+  r = await seatGet(producer, '/packs/valorant/overlay/ingame.html');
+  const packBody = Buffer.from(await r.arrayBuffer());
+  ok(r.status === 200 && packBody.length > 0 && packBody.length === fs.statSync(packFile).size, `a streamed pack file arrives whole through the tunnel (${packBody.length} of ${fs.statSync(packFile).size} bytes)`);
   const localState = (await local('/api/state')).body;
   eq(localState.settings.obsPassword, 'nobody-should-see-this', 'the password is still there on the broadcast PC itself');
 
@@ -254,6 +262,185 @@ try {
   ok(r.status === 404 || r.status === 410, 'an invented invite code gets nowhere');
   r = await relay.fetch(`/j/${room}/${producer.code}`, { method: 'POST', body: new URLSearchParams({ name: 'twice' }) });
   eq(r.status, 410, 'a single-use invite cannot be used again');
+
+  // --- a talent seat: one slot's camera link -------------------------------
+  // A caster's phone on another network. It gets the join page and ONE slot's
+  // signaling through the relay; the OBS receiver stays local on the rig and
+  // the media itself goes peer to peer (not exercised here - see
+  // tools/bench/talent-bench.mjs --relay for real WebRTC through this path).
+  console.log('talent seats');
+
+  // A local OBS receiver for the talent's slot, and one for a slot it must never reach.
+  function localSocket(slot, role = 'obs_receiver') {
+    const w = new WebSocket(`ws://127.0.0.1:${PORT}/talent/signaling?role=${role}&slot=${slot}`);
+    w.got = [];
+    w.on('message', (d) => { try { w.got.push(JSON.parse(String(d))); } catch { /* ignore */ } });
+    return new Promise((res, rej) => { w.once('open', () => res(w)); w.once('error', rej); });
+  }
+  /** A tunnelled socket as a browser on the relay origin would open it. */
+  async function relaySocket(seat, p) {
+    const res = await relay.fetch(p, { headers: { ...asSeat(seat), Upgrade: 'websocket' } });
+    if (!res.isUpgrade) return { refused: res.status };
+    const s = res.webSocket;
+    s.got = []; s.closedWith = null;
+    s.onmessage = (t) => { try { s.got.push(JSON.parse(t)); } catch { /* ignore */ } };
+    s.onclose = (code, reason) => { s.closedWith = { code, reason }; };
+    return s;
+  }
+
+  // Turn on a TURN server with a shared secret, the way the Talent panel does.
+  await local('/api/state', { settings: { talent: { turn: { url: 'turns:turn.example.test:443?transport=tcp', secret: 'turn-shared-secret' } } } });
+
+  r = await local('/api/remote/talent-invite', { slot: 'caster9' });
+  eq(r.status, 400, 'a talent link for a slot outside caster1..8 is refused');
+  r = await local('/api/remote/invite', { role: 'talent' });
+  eq(r.status, 400, 'a talent seat cannot be minted without a slot through the generic invite');
+  const tInv = await local('/api/remote/talent-invite', { slot: 'caster2', name: 'Riley' });
+  ok(tInv.status === 200 && tInv.body.slot === 'caster2' && /\/j\//.test(tInv.body.link), 'the desk mints a talent link bound to caster2');
+  ok(tInv.body.exp - Date.now() <= 15 * 60 * 1000 + 5000, 'a talent link is short-lived (15 minutes by default)');
+  r = await seatPost(producer, '/api/remote/talent-invite', { slot: 'caster2' });
+  ok(r.status === 401 || r.status === 403, 'a remote seat cannot mint a talent link');
+
+  const tDoor = await relay.fetch(`/j/${room}/${tInv.body.code}`, {
+    method: 'POST', body: new URLSearchParams({ name: 'Riley' }), headers: { 'content-type': 'application/x-www-form-urlencoded', 'Sec-Fetch-Site': 'cross-site' },
+  });
+  const tCookie = /(^|[^;]*)(cta_seat=[^;]+)/.exec(tDoor.headers.get('set-cookie') || '');
+  eq([tDoor.status, tDoor.headers.get('location')], [303, '/overlays/talent/join.html'], 'the talent link lands on the talent join page');
+  const talent = { cookie: tCookie ? tCookie[2] : '' };
+  r = await relay.fetch(`/j/${room}/${tInv.body.code}`, { method: 'POST', body: new URLSearchParams({ name: 'again' }) });
+  eq(r.status, 410, 'a talent link is single use');
+
+  const bound = await until('the rig to bind the talent seat', async () => {
+    const s = await local('/api/remote');
+    return (s.body.seats || []).find((x) => x.role === 'talent' && x.name === 'Riley') || null;
+  });
+  eq(bound.slot, 'caster2', 'the desk sees the talent seat, bound to caster2 by the rig');
+
+  r = await seatGet(talent, '/overlays/talent/join.html');
+  const page = await r.text();
+  ok(r.status === 200 && /TALENT STUDIO/.test(page), 'the talent seat loads its join page through the relay');
+  eq(r.headers.get('x-frame-options'), 'DENY', 'and it cannot be framed by another site');
+  r = await relay.fetch('/overlays/talent/join.html', { headers: { Cookie: talent.cookie, 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate' } });
+  eq(r.status, 200, 'reopening it from a bookmark works (Sec-Fetch-Site: none, top-level)');
+  r = await relay.fetch('/overlays/talent/join.html', { headers: { Cookie: talent.cookie, 'Sec-Fetch-Site': 'cross-site' } });
+  eq(r.status, 403, 'but another site cannot fetch it with the borrowed cookie');
+  r = await relay.fetch('/api/state', { headers: { Cookie: talent.cookie, 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate' } });
+  eq(r.status, 403, 'the bookmark exception is the talent page only');
+
+  for (const [m, p, why] of [
+    ['GET', '/api/state', 'the desk'],
+    ['GET', '/api/remote/me', 'who-am-I'],
+    ['GET', '/api/talent', 'the slot table'],
+    ['GET', '/healthz', 'healthz'],
+    ['GET', '/packs/valorant/overlay/ingame.html', 'a pack overlay'],
+    ['GET', '/overlays/talent/view.html', 'the OBS receiver page'],
+    ['GET', '/overlays/talent/join.html?slot=caster3', 'its page with another slot in the query (allowed - the query changes nothing)'],
+  ]) {
+    r = await seatGet(talent, p);
+    const want = p.includes('?slot=') ? 200 : 403;
+    eq(r.status, want, `talent seat ${m} ${p} -> ${want} (${why})`);
+  }
+  r = await seatPost(talent, '/api/state', { series: { scoreA: 99 } });
+  eq(r.status, 403, 'a talent seat cannot write the desk');
+
+  // The hub socket: refused outright, before a hello carries any state.
+  const tHub = await relaySocket(talent, '/ws');
+  await until('the hub socket to be refused', () => tHub.closedWith);
+  ok(tHub.closedWith.code === 4003 && !tHub.got.some((f) => f.type === 'hello'), 'a talent seat opening /ws is closed (4003) without a hello');
+
+  // Signaling with a forged role and slot in the query: the rig decides.
+  const rx2 = await localSocket('caster2');
+  const rx3 = await localSocket('caster3');
+  const tSig = await relaySocket(talent, '/talent/signaling?role=obs_receiver&slot=caster3');
+  ok(!tSig.refused, 'the talent seat opens its signaling socket through the relay');
+  const tCfg = await until('CONFIG on the talent socket', () => tSig.got.find((f) => f.type === 'CONFIG'));
+  eq([tCfg.slot, tCfg.role], ['caster2', 'caster'], 'a forged ?role=obs_receiver&slot=caster3 is ignored: it is caster2\'s caster');
+  const turn = (tCfg.iceServers || []).find((s) => /^turns?:/.test([].concat(s.urls)[0]));
+  ok(turn && /^\d+:/.test(turn.username) && turn.credential && turn.credential !== 'turn-shared-secret', 'the talent gets TURN with a short-lived credential minted for it');
+  ok(!JSON.stringify(tCfg).includes('turn-shared-secret'), 'and never the TURN secret itself');
+  await until('the caster2 receiver to see the talent online', () => rx2.got.find((f) => f.type === 'TALENT_ONLINE'));
+  tSig.send(JSON.stringify({ type: 'offer', offer: { type: 'offer', sdp: 'v=0 PHONE-OFFER' }, seq: 1 }));
+  const phoneOffer = await until('the phone offer to reach caster2', () => rx2.got.find((f) => f.type === 'offer'));
+  eq(phoneOffer.offer.sdp, 'v=0 PHONE-OFFER', "the phone's offer reaches the rig's caster2 receiver");
+  rx2.send(JSON.stringify({ type: 'answer', answer: { type: 'answer', sdp: 'v=0 OBS-ANSWER' }, seq: 1 }));
+  const obsAnswer = await until('the answer to reach the phone', () => tSig.got.find((f) => f.type === 'answer'));
+  eq(obsAnswer.answer.sdp, 'v=0 OBS-ANSWER', 'and the OBS answer comes back down the relay');
+  await sleep(300);
+  ok(!rx3.got.some((f) => f.type === 'offer' || f.type === 'TALENT_ONLINE'), 'caster3 never hears from the caster2 talent');
+  const tStat = (await local('/api/talent')).body.slots;
+  ok(tStat.caster2 && tStat.caster2.remote === true, 'the slot table says caster2 is a remote caster');
+
+  // TURN credentials never reach a desk seat: not in /api/state, not in a state push.
+  r = await seatGet(producer, '/api/state');
+  const pState = await r.json();
+  ok(pState.settings.talent && pState.settings.talent.turn.url && pState.settings.talent.turn.secret === '', 'a producer sees a TURN url is set, but its secret is blanked');
+  ok(!JSON.stringify(frames).includes('turn-shared-secret') && !JSON.stringify(frames2).includes('turn-shared-secret'), 'no state pushed down a desk seat socket ever carried the TURN secret');
+  const pSig = await relaySocket(producer, '/talent/signaling?role=obs_receiver&slot=caster2');
+  await until('the producer to be refused talent signaling', () => pSig.closedWith || pSig.refused);
+  ok(pSig.refused || (pSig.closedWith.code === 4003 && !pSig.got.some((f) => f.type === 'CONFIG')), 'a producer cannot open talent signaling (it could take a slot or watch a call)');
+
+  // --- reconnects through the relay ----------------------------------------
+  // 1. The relay drops the talent's socket (an eviction, a deploy).
+  const offline1 = rx2.got.length;
+  eq(relay.dropClients(room) > 0, true, 'the relay drops every browser socket in the room');
+  await until('the talent socket to see it', () => tSig.closedWith);
+  const offlineMsg = await until('the caster2 receiver to be told', () => rx2.got.slice(offline1).find((f) => f.type === 'TALENT_OFFLINE'));
+  eq(offlineMsg.graceful, false, 'the OBS side hears a non-graceful drop (it keeps a live call playing)');
+  const tSig2 = await relaySocket(talent, '/talent/signaling');
+  const cfg2 = await until('CONFIG again after the redial', () => tSig2.got && tSig2.got.find((f) => f.type === 'CONFIG'));
+  eq(cfg2.slot, 'caster2', 'the talent redials and is caster2 again');
+  await until('the receiver to see the talent back', () => rx2.got.slice(offline1).find((f) => f.type === 'TALENT_ONLINE'));
+  ok(true, 'and the OBS side sees it come back online');
+
+  // 2. The relay drops the RIG's socket: every hosted socket dies until the agent redials.
+  eq(relay.dropAgent(room), 1, "the relay drops the rig's socket");
+  await until('the talent socket to close', () => tSig2.closedWith);
+  eq(tSig2.closedWith.code, 4004, 'the talent sees 4004 "the rig disconnected" (the page retries)');
+  await until('the rig to redial', async () => (await local('/api/remote')).body.connected === true, 20000);
+  ok(true, 'the agent redials the relay by itself');
+  const tSig3 = await until('the talent to get back in', async () => {
+    const s = await relaySocket(talent, '/talent/signaling');
+    return s.refused ? null : s;
+  });
+  const cfg3 = await until('CONFIG after the rig came back', () => tSig3.got.find((f) => f.type === 'CONFIG'));
+  eq(cfg3.slot, 'caster2', 'the talent seat survives the rig reconnect, still bound to caster2');
+
+  // 3. A second talent link for the same slot replaces the first caster.
+  const tInvB = await local('/api/remote/talent-invite', { slot: 'caster2', name: 'Backup' });
+  const doorB = await relay.fetch(`/j/${room}/${tInvB.body.code}`, { method: 'POST', body: new URLSearchParams({ name: 'Backup' }), headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+  const talentB = { cookie: (/(^|[^;]*)(cta_seat=[^;]+)/.exec(doorB.headers.get('set-cookie') || '') || [])[2] || '' };
+  await until('the rig to bind the second talent', async () => ((await local('/api/remote')).body.seats || []).some((x) => x.name === 'Backup' && x.slot === 'caster2'));
+  const tSigB = await relaySocket(talentB, '/talent/signaling');
+  await until('the first caster to be replaced', () => tSig3.closedWith);
+  eq([tSig3.closedWith.code, tSig3.closedWith.reason], [1000, 'replaced'], 'the first talent is closed with "replaced" (its page shows OPENED ELSEWHERE)');
+  tSigB.close();
+
+  // Expired and revoked links.
+  const tInvX = await local('/api/remote/talent-invite', { slot: 'caster4' });
+  const roomObj = relay.env.ROOM._rooms.get(room);
+  const invs = await roomObj.storage.get('invites');
+  invs[tInvX.body.code.replace(/-/g, '')].exp = Date.now() - 1000;
+  await roomObj.storage.put('invites', invs);
+  r = await relay.fetch(`/j/${room}/${tInvX.body.code}`, { method: 'POST', body: new URLSearchParams({ name: 'late' }) });
+  eq(r.status, 410, 'an expired talent link is refused at the door');
+  const tInvR = await local('/api/remote/talent-invite', { slot: 'caster4' });
+  await local('/api/remote/revoke', { code: tInvR.body.code });
+  await sleep(200);
+  r = await relay.fetch(`/j/${room}/${tInvR.body.code}`, { method: 'POST', body: new URLSearchParams({ name: 'revoked' }) });
+  ok(r.status === 404 || r.status === 410, 'a revoked talent link opens nothing');
+
+  // Closing the talent seat at the desk drops its call's signaling and kills the cookie.
+  const tSig4 = await relaySocket(talent, '/talent/signaling');
+  await until('a fresh talent socket', () => tSig4.got && tSig4.got.find((f) => f.type === 'CONFIG'));
+  await local('/api/remote/kick', { seat: bound.id });
+  await until('the talent socket to drop', () => tSig4.closedWith);
+  eq(tSig4.closedWith.code, 4003, 'closing the talent seat drops its socket with 4003 (the page stops retrying: LINK CLOSED)');
+  r = await seatGet(talent, '/overlays/talent/join.html');
+  eq(r.status, 401, 'and the talent cookie is dead');
+  const seatBId = ((await local('/api/remote')).body.seats || []).find((x) => x.name === 'Backup');
+  if (seatBId) await local('/api/remote/kick', { seat: seatBId.id });
+  rx2.close(); rx3.close();
+  await local('/api/state', { settings: { talent: { turn: { url: '', secret: '' } } } });
 
   // --- the kick -------------------------------------------------------------
 

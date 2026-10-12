@@ -146,6 +146,7 @@ export function defaultState() {
     live: defaultLive(),
     settings: {
       obsCollectionName: 'ClearToAir', canvas: [1920, 1080], replayDir: '', gsiToken: BOOT_TOKEN,
+      gsiLan: { enabled: false, allow: [] },   // observer PC: GSI from listed LAN addresses (adapters/_lan.js)
       teamMap: { A: null, B: null }, vdo: { room: '', password: '' }, obsPassword: '', obsPort: 4455,
       startggToken: '',
       hudDelayMs: 0,   // overlay telemetry presentation delay, 0-1000 ms (stateBuffer.js)

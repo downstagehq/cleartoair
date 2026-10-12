@@ -3,6 +3,37 @@
 Newest first. One section per release; the notes for `gh release create` come from here
 (see [RELEASE.md](RELEASE.md), step 1).
 
+## 0.3.3 - an observer PC, talent links, a sharper scoreboard reader
+
+**Upgrading:** nothing to do. LAN listening is off until you switch it on.
+
+- **Observer PC (CS2, Dota 2).** The game can now run on a separate observer PC and send its
+  data to the rig over the venue network. Data tab → Observer PC → switch LAN on, add the
+  observer PC's address, copy the cfg it shows onto that PC, restart the game there. Only the
+  addresses you list are accepted, one by one (no ranges), and the GSI token is still checked.
+  Everyone else on the network gets refused, and preflight names them, so a player's PC on the
+  same LAN cannot put a score on air. The control room and the API stay on this PC only. Windows
+  may ask once whether Node.js may use the network: allow Private networks. Tested over this
+  PC's own LAN address; a second PC on a real venue network is still to do.
+- **Talent links (CTA Studio, beta).** Setup → Talent: make a single-use link (15 minutes,
+  one slot) with a QR code. The caster opens it on a phone or laptop anywhere. The page
+  comes from the hosted relay over HTTPS, so the camera works, and their call reaches OBS as
+  that slot's source. The link opens that one page and that one slot's call setup, nothing
+  else. Media goes straight between the two ends. Dropped connections recover by themselves.
+  An optional TURN server (Settings, never shown to remote seats) helps strict networks.
+  A one-page quick-start card for the caster is in `docs/talent-quickstart.pdf`.
+  **Needs the hosted relay update before it works on room.cleartoair.com.** Everything else
+  in this release works with the relay as it is. Tested with two browsers on one PC through a
+  local copy of the relay; phones and real networks are still to do. VDO.Ninja stays the
+  default.
+- **Reading the scoreboard off the screen, take two.** Tested on boards closer to the game's:
+  its fonts, team-tinted rows, agent icons, JPEG compression, 1440p/720p/4:3 stretched, and a
+  HUD over the edge. 638 of 640 cells read, none wrong (was 474). JPEG screenshots are
+  accepted. The work runs off the main thread, so the desk never stutters while it reads.
+  Still not tried on the real game's screen.
+- **Remote seats: team logos and player photos arrived empty.** Any file the rig streamed
+  through the relay reached the seat as zero bytes. Fixed.
+
 ## 0.3.2 - rehearse with recorded data, read the scoreboard off the screen
 
 **Upgrading:** nothing to do. After the update the graphics in OBS reload themselves once.

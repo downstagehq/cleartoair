@@ -133,10 +133,10 @@ export function ScoreboardImport() {
                 <Button size="sm" icon={<ScanText size={13} />} disabled={busy || !obsUp} title="Read the end-of-map scoreboard off GAME · Capture in OBS (the game feed, not program)" onClick={() => void read({ source: 'obs' })}>
                   Read game feed
                 </Button>
-                <Button size="sm" variant="ghost" icon={<ImageUp size={13} />} disabled={busy} title="Read a PNG screenshot of the scoreboard" onClick={() => fileRef.current?.click()}>
+                <Button size="sm" variant="ghost" icon={<ImageUp size={13} />} disabled={busy} title="Read a PNG or JPEG screenshot of the scoreboard" onClick={() => fileRef.current?.click()}>
                   Read image
                 </Button>
-                <input ref={fileRef} type="file" accept="image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
               </>
             )}
             {result ? (

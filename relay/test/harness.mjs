@@ -204,7 +204,7 @@ export async function startHarness({ port = 0, assetsDir = null } = {}) {
 
   server.on('upgrade', async (req, socket, head) => {
     const url = new URL(req.url || '/', 'http://x');
-    if (url.pathname !== '/__agent' && url.pathname !== '/ws') { socket.destroy(); return; }
+    if (url.pathname !== '/__agent' && url.pathname !== '/ws' && url.pathname !== '/talent/signaling') { socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, async (real) => {
       const headers = new Headers({ Upgrade: 'websocket' });
       if (req.headers.cookie) headers.set('Cookie', req.headers.cookie);
@@ -222,7 +222,13 @@ export async function startHarness({ port = 0, assetsDir = null } = {}) {
       outside.onmessage = (text) => { try { real.send(text); } catch { /* gone */ } };
       real.on('message', (data) => { outside.send(String(data)); });
       real.on('close', () => { outside.close(1000, 'rig closed'); });
-      outside.onclose = () => { try { real.close(); } catch { /* gone */ } };
+      // Carry the room's close code and reason through to the real socket: the
+      // talent page reads the reason ('replaced' stops its retries).
+      outside.onclose = (code, reason) => {
+        const valid = (code >= 1000 && code <= 1014 && ![1004, 1005, 1006].includes(code)) || (code >= 3000 && code <= 4999);
+        const c = valid ? code : 1000;
+        try { real.close(c, String(reason || '').slice(0, 120)); } catch { /* gone */ }
+      };
     });
   });
 
@@ -238,6 +244,26 @@ export async function startHarness({ port = 0, assetsDir = null } = {}) {
       const headers = new Headers(init.headers || {});
       if (!headers.has('Sec-Fetch-Site')) headers.set('Sec-Fetch-Site', 'same-origin');
       return worker.default.fetch(new Request(`http://127.0.0.1:${actual}${pathname}`, { ...init, headers }), env);
+    },
+    /**
+     * Test hooks for the reconnect cases - a relay that drops sockets, as
+     * Cloudflare does on a deploy or an eviction:
+     *   dropAgent(room)    the rig's socket (the agent redials by itself)
+     *   dropClients(room)  every browser socket in the room (pages redial)
+     */
+    dropAgent(room) {
+      const r = ns._rooms.get(room);
+      if (!r) return 0;
+      const socks = r.ctx.getWebSockets('agent');
+      for (const ws of socks) ws.close(1012, 'relay restarting');
+      return socks.length;
+    },
+    dropClients(room) {
+      const r = ns._rooms.get(room);
+      if (!r) return 0;
+      const socks = r.clientSockets();
+      for (const ws of socks) ws.close(1012, 'relay restarting');
+      return socks.length;
     },
     close() { wss.close(); server.close(); globalThis.Response = RealResponse; },
   };

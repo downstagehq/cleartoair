@@ -46,10 +46,70 @@ it is reachable through the tunnel, by anyone, ever. The rule is deny-by-default
 (`agent/src/remote-policy.js`), so a route added to the agent later stays
 unreachable until someone lists it on purpose.
 
+## Talent seats: a caster's camera from another network
+
+*Added 12 October 2026.* A fourth kind of seat, for a caster on a phone or laptop
+somewhere else. It is not a seat at the desk: it is one slot's camera and mic.
+
+**For the operator:** Setup → Remote seats → **Talent camera links**. Pick the
+slot (`caster1`…`caster8`, labelled with the talent's name), press **Make talent
+link**. The link is copied, and its QR code is on screen so the caster can scan it
+off the rig's monitor. The link is single use and lasts 15 minutes. **Revoke** kills
+an unused one; **Close seat** in the seat list ends a used one. Send the caster
+`docs/talent-quickstart.pdf` (one page, pictures).
+
+**What the caster's browser can do:** load `/overlays/talent/join.html`, and open
+`/talent/signaling` for the slot the RIG bound to the link. Nothing else: no
+`/api` (not even `/api/remote/me`), no hub socket, no packs, no other overlay,
+not `view.html`, no other slot. A `?slot=` or `?role=` in the page's own URL is
+ignored. The join page itself may be reopened from a bookmark (a top-level
+`Sec-Fetch-Site: none` navigation); everything else must be same-origin.
+
+**How it works**
+
+```
+  phone ──https──► relay (/j/<room>/<code> → /overlays/talent/join.html, tunnelled)
+    │                │  /talent/signaling: one tunnelled socket, offer/answer/ICE only
+    │                ▼
+    │        agent/src/remote.js ── slot from ITS OWN invite record ──► talent.js
+    │                                                                      │
+    └──────────── WebRTC media, peer to peer (STUN, or TURN) ─────────► view.html in OBS (local)
+```
+
+- The rig mints the code and records `code → slot` in `agent/data/remote.json`.
+  The relay stores the code as a `talent` invite and nothing else; on join it
+  hands the code back, and the agent binds `seat → slot` from its own record. A
+  talent seat the agent never bound (a forged or stale join) is kicked on sight.
+  Bindings survive an agent restart.
+- The relay passes which socket was asked for (`/ws` or `/talent/signaling`);
+  `remote-policy.js allowChannel` decides. A talent seat gets only its slot's
+  signaling, always as the caster; every other seat gets only the hub.
+- Everything a caster sends is rebuilt from known fields before it reaches OBS
+  (`talent.js` clean*), capped at 64 KB per message and 400 messages per 10 s.
+- The talent page is served with `X-Frame-Options: DENY`,
+  `frame-ancestors 'none'`, `Referrer-Policy: no-referrer` and a camera/mic
+  `Permissions-Policy`.
+- **ICE comes from one place.** The talent hub's first message on every
+  signaling socket is `{type:'CONFIG', slot, role, iceServers}` - for the
+  caster's page and OBS's `view.html` alike. Google STUN by default. An optional
+  TURN server lives in `settings.talent.turn`: with a shared `secret` (coturn
+  `use-auth-secret`) each socket gets its own credential that expires in 12 h, and
+  the secret never leaves the PC; static `username`/`credential` also work.
+  `settings.talent.turn.username/credential/secret` are redacted from every
+  remote seat like the OBS password, and no hub client ever receives a CONFIG.
+
+**Reconnects (bench-tested, `tools/bench/talent-bench.mjs --relay`):** the relay
+dropping the caster's socket, the relay dropping the rig's socket, and the agent
+restarting all keep the call going (media is peer to peer); the page shows
+RECONNECTING… and comes back to the same slot without renegotiating. OBS
+refreshing its source renegotiates through the tunnel. The desk closing the seat
+stops the page (LINK CLOSED, no retries) and clears OBS within a frame.
+
 ## What never leaves the PC
 
 `/api/state` carries `settings.obsPassword`, `settings.gsiToken`,
-`settings.startggToken` and `settings.vdo.password`. That is why the local API
+`settings.startggToken`, `settings.vdo.password` and the talent TURN
+credentials (`settings.talent.turn.*`). That is why the local API
 refuses cross-site callers at all (`agent/src/http.js`). Every one of them is
 blanked before the state goes down the tunnel — in the REST answer, in the
 `hello` frame and in every `state` push. The seat is told *which* fields were
@@ -106,7 +166,14 @@ as each of the three roles, and checks the things that would actually hurt:
 that the OBS password never leaves, that a scorer cannot cut program, that a
 producer waits at the door, that a forged cookie is refused, that a cross-site
 page cannot drive the desk with a borrowed one, and that a kick takes the socket
-away, and that two seats on the desk at once each follow their own role. 60 checks.
+away, and that two seats on the desk at once each follow their own role. Since
+12 October it also covers talent seats: the slot binding, every denial (`/api/*`,
+`/ws`, packs, `view.html`, a forged `?role=&slot=`), TURN credentials reaching the
+talent but never a desk seat, single use, expiry, revoke, kick, relay and rig
+socket drops, and a second link replacing the first caster. 111 checks.
+
+For real WebRTC media through the relay (headless Chrome with fake camera and
+mic): `node tools/bench/talent-bench.mjs --relay` - see `docs/TALENT-BENCH.md`.
 
 The harness (`relay/test/harness.mjs`) runs the **real** `worker.js` and
 `room.js` on Node stand-ins for `WebSocketPair`, Durable Object storage and the
@@ -139,8 +206,12 @@ storage durability across a restart, and the real 1 MiB frame cap.
 - The relay URL is blank in a shipped build until someone deploys a relay and
   pastes its address in. A default could be baked into `agent/src/remote.js` once there is a
   real address.
-- A seat has no voice. Talent audio is still VDO.Ninja / CTA Studio
-  (`agent/src/talent.js`); a remote producer is driving the desk silently.
+- A desk seat has no voice. A caster can now come in over the relay (talent
+  seats, above), but a remote producer is still driving the desk silently, and
+  the talent page has no return feed (IFB) from the desk.
+- Talent seats need the relay redeployed with this `relay/src` before they work
+  on room.cleartoair.com (the tunnelled `/overlays/talent/` path, the
+  `/talent/signaling` socket and the `talent` role are all new there).
 - The seat list is not in the hosted room, by design — but a producer cannot
   currently see who else is on the desk with them.
 - Hosted thumbnails are a poll, not a stream. If the uplink is tight this is the

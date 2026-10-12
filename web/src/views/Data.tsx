@@ -241,6 +241,116 @@ function AdapterCard({ a }: { a: Adapter }) {
   );
 }
 
+interface GsiLan {
+  ok: boolean;
+  enabled: boolean;
+  allow: string[];
+  addresses: { iface: string; address: string }[];
+  receivers: { id: string; label: string; boundHost: string | null; port: number; refused: { ip: string; count: number; reason: string }[] }[];
+  observer: { id: string; game: string; port: number; path: string; uri: string | null; content: string | null }[];
+}
+
+/**
+ * Observer PC: CS2/Dota GSI from another PC on the LAN, by exact address (agent/src/adapters/_lan.js).
+ * Off by default. Rig only: the agent refuses this route to a remote seat, and so does this panel.
+ */
+function ObserverPc({ game }: { game: string }) {
+  const [info, setInfo] = useState<GsiLan | null>(null);
+  const [allow, setAllow] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [rigIp, setRigIp] = useState('');
+  const load = async () => {
+    try {
+      const r = await get<GsiLan>('/api/gsi/lan');
+      setInfo(r);
+      setAllow(r.allow.join('\n'));
+    } catch {
+      setInfo(null);
+    }
+  };
+  useEffect(() => {
+    void load();
+    const t = window.setInterval(() => void load(), 10000);
+    return () => window.clearInterval(t);
+  }, []);
+  const save = async (enabled: boolean) => {
+    setBusy(true);
+    try {
+      const r = await post<GsiLan>('/api/gsi/lan', { enabled, allow });
+      setInfo(r);
+      setAllow(r.allow.join('\n'));
+      toastOk(enabled ? 'LAN on' : 'LAN off', enabled ? `game data accepted from ${r.allow.join(', ') || 'nobody yet'}` : 'game data from this PC only');
+    } catch (e) {
+      toastErr('Observer PC not saved', errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!info) return null;
+  const cfg = info.observer.find((o) => (game === 'dota2' ? o.id === 'dota2gsi' : o.id === 'cs2gsi'));
+  const refused = info.receivers.flatMap((r) => r.refused.map((x) => `${x.ip} (${x.count}×)`));
+  // A rig often has more than one address (LAN, Wi-Fi, a VPN): the operator picks the one the observer PC can reach.
+  const ips = info.addresses.map((a) => a.address);
+  const ip = ips.includes(rigIp) ? rigIp : ips[0] || '';
+  const content = cfg && cfg.content && ip ? cfg.content.replace(/"uri"(\s+)"http:\/\/[^"]+"/, `"uri"$1"http://${ip}:${cfg.port}/"`) : null;
+  return (
+    <div className="md:col-span-2 hairline-t pt-3 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-col">
+          <span className="label">Observer PC</span>
+          <span className="text-[12px] text-ink-3">The game runs on another PC on this network and sends its data here.</span>
+        </div>
+        <Toggle on={info.enabled} disabled={busy} onChange={(v) => void save(v)} label={info.enabled ? 'LAN on' : 'LAN off'} />
+      </div>
+      {info.enabled ? (
+        <>
+          <Field label="Allowed observer PCs" hint="One address per line. Exact addresses only; every other machine on the network is refused. The GSI token is still checked.">
+            <textarea className="inp mono text-[12px] h-[70px] resize-y" spellCheck={false} placeholder="192.168.1.20" value={allow} onChange={(e) => setAllow(e.target.value)} />
+          </Field>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => void save(true)}>
+              Save
+            </Button>
+            {info.receivers.map((r) => (
+              <Pill key={r.id} tone={r.boundHost === '0.0.0.0' ? 'ok' : 'warn'}>
+                {r.id} · {r.boundHost ?? '?'}:{r.port}
+              </Pill>
+            ))}
+            {refused.length ? <Pill tone="warn">refused {refused.join(', ')}</Pill> : null}
+          </div>
+          {cfg ? (
+            <div className="flex flex-col gap-1">
+              <div className="text-[12px] text-ink-2">
+                On the observer PC, save this as <span className="mono">{cfg.path}</span> in {game === 'dota2' ? 'Dota 2' : 'CS2'}'s cfg folder (no BOM), then restart the game. Windows may ask to allow Node.js on the network: allow it for Private networks.
+              </div>
+              {ips.length > 1 ? (
+                <div className="flex items-center gap-2 flex-wrap text-[12px] text-ink-3">
+                  This PC on the observer's network:
+                  {info.addresses.map((a) => (
+                    <Button key={a.address} size="sm" variant={a.address === ip ? 'primary' : 'ghost'} onClick={() => setRigIp(a.address)} title={a.iface}>
+                      {a.address}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {!ips.length ? <div className="text-[12px] text-warn">This PC has no network address: connect it to the venue network first.</div> : null}
+              {content ? (
+                <div className="rounded-[6px] bg-bg-0 border border-line overflow-hidden">
+                  <div className="flex items-center justify-between px-2 h-7 hairline-b">
+                    <span className="mono text-[11px] text-ink-3 ellipsis">http://{ip}:{cfg.port}/</span>
+                    <CopyBtn text={content} />
+                  </div>
+                  <pre className="mono text-[11px] text-ink-2 p-2 max-h-32 overflow-auto whitespace-pre">{content}</pre>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function num(v: unknown) {
   return typeof v === 'number' ? v : '—';
 }
@@ -312,6 +422,7 @@ export function Data() {
   };
 
   const game = state.game;
+  const seat = useStore((s) => s.seat);
   const cols =
     game === 'rocketleague'
       ? ['boost', 'score', 'goals', 'K', 'D', 'A']
@@ -363,6 +474,7 @@ export function Data() {
             {forGame.map((a) => (
               <AdapterCard key={a.id} a={a} />
             ))}
+            {!seat && (game === 'cs2' || game === 'dota2') ? <ObserverPc game={game} /> : null}
             {others.length ? (
               <details className="md:col-span-2">
                 <summary className="text-[12px] text-ink-3 cursor-pointer">{others.length} adapters for other games</summary>

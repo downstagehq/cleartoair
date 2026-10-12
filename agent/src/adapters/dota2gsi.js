@@ -7,6 +7,7 @@
 // `league` block (league.radiant.name / league.dire.name) when spectating a league match with "league" "1".
 
 import { createGsiServer, gsiStatus, resolveToken, resolveOpts } from './_gsi.js';
+import { lanConfig } from './_lan.js';
 import { normalize, pushEvent, fmtClock } from './_normalize.js';
 
 export const id = 'dota2gsi';
@@ -186,6 +187,7 @@ export function create({ config, emit, log, state, getState, capture } = {}) {
   let last = null;
   const srv = createGsiServer({
     port, host, tag: id, log, capture,
+    getLan: () => lanConfig(getState?.()),
     getToken: () => resolveToken({ config, getState }),
     onPayload: (p) => { const raw = parsePayload(p, ctx); last = raw; emit?.(normalize(raw, getState?.())); },
   });
@@ -194,6 +196,7 @@ export function create({ config, emit, log, state, getState, capture } = {}) {
     stop: async () => { await srv.stop(); emit?.({ source: id, connected: false }); },
     status: () => gsiStatus(srv, 15_000, last ? `${last.sides.left.score}-${last.sides.right.score} ${last.clock} ${last.phase}` : ''),
     parse: (p) => parsePayload(p, ctx),
+    lan: () => srv.lan(),
   };
 }
 
@@ -240,7 +243,7 @@ export function install({ config, state, getState } = {}) {
       `   Organisation names come from the "league" block, which the game only fills when spectating a league match;`,
       `   otherwise the sides show as Radiant / Dire and the control room's team names are used.`,
       `4. Token "${token}" is the current settings.gsiToken. If it is changed or regenerated, press Install again`,
-      `   and restart Dota 2. Save the file WITHOUT a UTF-8 BOM. The spectating client must run on this PC for now.`,
+      `   and restart Dota 2. Save the file WITHOUT a UTF-8 BOM. Spectating on another PC: Data tab > Observer PC.`,
     ].join('\n'),
   };
 }

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { activeProfile, profileIni, OBS_PROFILES_DIR } from './config.js';
 import { RECIPE_SCENES, RECIPE_BED, RECIPE_PAGES, DESKTOP_AUDIO, GAME_SOURCE } from './obs/collection.js';
 import { captureOrderProblems, repointUrl } from './obs/sync.js';
+import { lanConfig } from './adapters/_lan.js';
 // Namespace import on purpose: loadInfo() is being added to state.js by another
 // change. Reading a missing export off a namespace is undefined, not a throw, so
 // the state-loads check simply skips until it lands.
@@ -163,6 +164,23 @@ export function createPreflight(ctx) {
     else out.push(ok('audio-bed', 'audio bed correct in every recipe scene'));
   }
 
+  /** Observer PC (adapters/_lan.js): say plainly what the rig accepts from the network, and who it turned away. */
+  function lanChecks(out) {
+    if (!registry || typeof registry.gsiLan !== 'function') return;
+    const lan = lanConfig(state.get());
+    const rx = registry.gsiLan();
+    const refused = rx.flatMap((r) => (r.refused || []).map((x) => `${x.ip} (${r.id}, ${x.count}x: ${x.reason})`));
+    if (!lan.enabled) {
+      if (rx.some((r) => r.boundHost === '0.0.0.0')) out.push(warn('gsi-lan', 'A game receiver still listens on the LAN', 'LAN listening was switched off but the receiver was not restarted', 'Data tab → Observer PC → switch LAN off again (it restarts the receivers), or Stop and Start the adapter.'));
+      return;
+    }
+    const where = rx.length ? rx.map((r) => `${r.id} on ${r.boundHost || '?'}:${r.port}`).join(', ') : 'no game receiver running';
+    if (rx.some((r) => r.boundHost && r.boundHost !== '0.0.0.0')) out.push(warn('gsi-lan', 'LAN is on but a receiver still listens on this PC only', where, 'Data tab → Observer PC → Save (it restarts the receivers).'));
+    else if (!lan.allow.length) out.push(warn('gsi-lan', 'LAN is on, but no observer PC is allowed yet', where, 'Data tab → Observer PC: add the address of the observer PC.'));
+    else out.push(ok('gsi-lan', `Game data accepted from the LAN: ${lan.allow.join(', ')}`, `${where}. Every other address is refused; the GSI token is still checked.`));
+    if (refused.length) out.push(warn('gsi-lan-refused', `Game data refused from ${refused.length} address(es) not on the list`, refused.join('; '), 'If one of them is your observer PC, add it in Data tab → Observer PC. If not, someone on this network is sending game data to the rig.'));
+  }
+
   async function overlayChecks(out) {
     const st = state.get();
     const pack = packs.get(st.game);
@@ -295,6 +313,7 @@ export function createPreflight(ctx) {
       const out = [ok('agent-up', `agent up ${Math.round(process.uptime())} s`, `pid ${process.pid}, port ${ctx.port}`)];
       try { stateChecks(out); } catch (e) { out.push(fail('state-loads', 'The show check crashed', e.message, 'Press "Run again" on the Preflight tab; if it stays, restart Clear to Air.')); }
       try { await obsChecks(out); } catch (e) { out.push(warn('obs-connected', 'OBS check threw', e.message)); }
+      try { lanChecks(out); } catch (e) { out.push(warn('gsi-lan', 'LAN check threw', e.message)); }
       try { await overlayChecks(out); } catch (e) { out.push(warn('browser-sources-online', 'overlay check threw', e.message)); }
       try { await diskChecks(out); } catch (e) { out.push(warn('disk-space', 'disk check threw', e.message)); }
       if (watchdog) out.push(...watchdog.warnings());

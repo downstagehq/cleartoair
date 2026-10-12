@@ -428,29 +428,52 @@ console.log('\n== talent studio: signaling ==');
   };
   const settle = () => new Promise((r) => setTimeout(r, 120));
 
+  // Real-shaped messages: the hub rebuilds everything it relays from known
+  // fields, so a bare { sdp } or { c } would (rightly) be dropped.
+  const OFFER = (sdp) => ({ type: 'offer', sdp });
+  const ANSWER = (sdp) => ({ type: 'answer', sdp });
+  const CAND = (c) => ({ candidate: `candidate:${c} 1 udp 2122260223 10.0.0.2 50000 typ host`, sdpMid: '0', sdpMLineIndex: 0 });
+
   // the ordinary case: OBS is up first, then the caster joins
   const rx = await open(url('obs_receiver', 'caster1'));
+  const rxConfig = await next(rx, (m) => m.type === 'CONFIG');
+  eq([rxConfig.slot, rxConfig.role], ['caster1', 'obs_receiver'], 'the first message on a socket is CONFIG, with its slot and role');
+  ok(Array.isArray(rxConfig.iceServers) && rxConfig.iceServers.some((s) => /^stun:stun\.l\.google\.com/.test(s.urls)), 'and the ICE list both pages use (Google STUN by default)');
   const online = next(rx, (m) => m.type === 'TALENT_ONLINE');
   const tx = await open(url('caster', 'caster1'));
   ok((await online).type === 'TALENT_ONLINE', 'a receiver already waiting is told the caster came online');
 
   const gotOffer = next(rx, (m) => m.type === 'offer');
-  tx.send(JSON.stringify({ type: 'offer', offer: { sdp: 'OFFER-1' } }));
+  tx.send(JSON.stringify({ type: 'offer', offer: OFFER('OFFER-1') }));
   eq((await gotOffer).offer.sdp, 'OFFER-1', 'the caster offer reaches the OBS receiver');
 
   const gotAnswer = next(tx, (m) => m.type === 'answer');
-  rx.send(JSON.stringify({ type: 'answer', answer: { sdp: 'ANSWER-1' } }));
+  rx.send(JSON.stringify({ type: 'answer', answer: ANSWER('ANSWER-1') }));
   eq((await gotAnswer).answer.sdp, 'ANSWER-1', 'the receiver answer reaches the caster');
 
   const gotCandR = next(rx, (m) => m.type === 'candidate');
-  tx.send(JSON.stringify({ type: 'candidate', candidate: { c: 'from-caster' } }));
-  eq((await gotCandR).candidate.c, 'from-caster', 'caster ICE candidates reach the receiver');
+  tx.send(JSON.stringify({ type: 'candidate', candidate: CAND('from-caster') }));
+  ok(/from-caster/.test((await gotCandR).candidate.candidate), 'caster ICE candidates reach the receiver');
 
   const gotCandT = next(tx, (m) => m.type === 'candidate');
-  rx.send(JSON.stringify({ type: 'candidate', candidate: { c: 'from-obs' } }));
-  eq((await gotCandT).candidate.c, 'from-obs', 'receiver ICE candidates reach the caster');
+  rx.send(JSON.stringify({ type: 'candidate', candidate: CAND('from-obs') }));
+  ok(/from-obs/.test((await gotCandT).candidate.candidate), 'receiver ICE candidates reach the caster');
   await settle();
-  eq(hub.talent.status().caster1, { caster: true, receivers: 1, offer: true }, 'the slot reports one caster and one receiver');
+  eq(hub.talent.status().caster1, { caster: true, remote: false, receivers: 1, offer: true }, 'the slot reports one caster and one receiver');
+
+  // Hygiene: what is relayed is rebuilt from known fields.
+  const junk = next(rx, (m) => m.type === 'candidate' && /junk/.test(m.candidate.candidate));
+  tx.send(JSON.stringify({ type: 'candidate', candidate: { ...CAND('junk'), onload: 'alert(1)', __proto__: { x: 1 } }, extra: 'nope' }));
+  const j = await junk;
+  ok(!('onload' in j.candidate) && !('extra' in j), 'fields a caster invents are not passed on to OBS');
+  let malformed = false;
+  const watchMalformed = (d) => { const m = JSON.parse(String(d)); if (m.type === 'offer' && !m.offer.sdp) malformed = true; };
+  rx.on('message', watchMalformed);
+  tx.send(JSON.stringify({ type: 'offer', offer: { type: 'answer', sdp: 'x' } }));
+  tx.send(JSON.stringify({ type: 'offer', offer: 'not an object' }));
+  await settle();
+  rx.off('message', watchMalformed);
+  ok(!malformed, 'a malformed offer is dropped, not relayed');
 
   // OBS refreshes or restarts mid-show, after the call was set up: the standing
   // offer has already been answered, and replaying it would get an answer the
@@ -462,9 +485,9 @@ console.log('\n== talent studio: signaling ==');
   const rx2 = await open(url('obs_receiver', 'caster1'));
   eq((await renegotiate).type, 'RENEGOTIATE', 'a receiver joining after the offer was answered gets the caster asked for a fresh offer');
   const freshOffer = next(rx2, (m) => m.type === 'offer');
-  tx.send(JSON.stringify({ type: 'offer', offer: { sdp: 'OFFER-2' }, seq: 2 }));
+  tx.send(JSON.stringify({ type: 'offer', offer: OFFER('OFFER-2'), seq: 2 }));
   eq((await freshOffer).offer.sdp, 'OFFER-2', 'the fresh offer reaches the new receiver');
-  tx.send(JSON.stringify({ type: 'candidate', candidate: { c: 'from-caster-2' }, seq: 2 }));
+  tx.send(JSON.stringify({ type: 'candidate', candidate: CAND('from-caster-2'), seq: 2 }));
   await settle();
 
   // the case the clients cannot handle themselves: a receiver joins after the
@@ -473,7 +496,7 @@ console.log('\n== talent studio: signaling ==');
   await settle();
   const rx3 = await open(url('obs_receiver', 'caster1'));
   eq((await next(rx3, (m) => m.type === 'offer')).offer.sdp, 'OFFER-2', 'a receiver joining before anyone answered is replayed the standing offer');
-  eq((await next(rx3, (m) => m.type === 'candidate')).candidate.c, 'from-caster-2', 'buffered candidates are replayed to a late receiver');
+  ok(/from-caster-2/.test((await next(rx3, (m) => m.type === 'candidate')).candidate.candidate), 'buffered candidates are replayed to a late receiver');
 
   // one receiver per slot: the newest replaces the older one
   const rx3closed = new Promise((res) => rx3.once('close', (_code, reason) => res(String(reason))));
@@ -492,9 +515,44 @@ console.log('\n== talent studio: signaling ==');
   const b = await open(url('caster', 'caster9'));
   let leaked = false;
   a.on('message', (d) => { const m = JSON.parse(String(d)); if (m.type === 'offer') leaked = true; });
-  b.send(JSON.stringify({ type: 'offer', offer: { sdp: 'WRONG-SLOT' } }));
+  b.send(JSON.stringify({ type: 'offer', offer: OFFER('WRONG-SLOT') }));
   await settle();
   ok(!leaked, 'an offer never leaks into another slot');
+
+  // A talent seat on the room relay (remote.js attach): always the caster of
+  // the slot the RIG bound, whatever its page asks for.
+  const c3 = await open(url('obs_receiver', 'caster3'));
+  const sent = [];
+  let closedWith = null;
+  const remoteCaster = hub.talent.attach({ send: (t) => { sent.push(JSON.parse(t)); return true; }, close: (code, reason) => { closedWith = { code, reason }; } }, { slot: 'caster3', who: 'seat42' });
+  eq(sent[0] && [sent[0].type, sent[0].slot, sent[0].role], ['CONFIG', 'caster3', 'caster'], 'a tunnelled talent seat is told its bound slot, as caster');
+  const c3offer = next(c3, (m) => m.type === 'offer');
+  remoteCaster.deliver(JSON.stringify({ type: 'offer', offer: OFFER('FROM-PHONE'), seq: 1 }));
+  eq((await c3offer).offer.sdp, 'FROM-PHONE', "the phone's offer reaches that slot's OBS source");
+  eq(hub.talent.status().caster3.remote, true, 'the slot says its caster is remote');
+  let threw = false; try { hub.talent.attach({ send() {}, close() {} }, { slot: '../caster1' }); } catch { threw = true; }
+  ok(threw, 'attach refuses anything that is not caster1..caster8');
+  // A flood from a tunnelled caster closes it; the OBS side is told it is gone.
+  const c3off = next(c3, (m) => m.type === 'TALENT_OFFLINE');
+  for (let i = 0; i < 450; i++) remoteCaster.deliver(JSON.stringify({ type: 'bye' }));
+  eq(closedWith && closedWith.code, 4008, 'a tunnelled caster flooding the hub is closed (4008)');
+  ok((await c3off).type === 'TALENT_OFFLINE', 'and the OBS side is told the caster is gone');
+  c3.close();
+
+  // ICE: one list, from settings; TURN credentials minted per socket when a
+  // shared secret is set (coturn use-auth-secret), so the secret never leaves.
+  const { iceServers, DEFAULT_ICE, TURN_TTL_S } = await import('./talent.js');
+  eq(iceServers({}), DEFAULT_ICE.map((s) => ({ ...s })), 'no TURN set: STUN only');
+  eq(iceServers({ talent: { turn: { url: 'turn:t.example:3478' } } }).length, 1, 'a TURN url with no credentials is left out rather than failing slowly');
+  const stat = iceServers({ talent: { turn: { url: 'turn:t.example:3478', username: 'u', credential: 'c' } } });
+  eq(stat[1], { urls: ['turn:t.example:3478'], username: 'u', credential: 'c' }, 'static TURN credentials pass through');
+  const nowS = 1_800_000_000_000;
+  const eph = iceServers({ talent: { turn: { url: 'turns:t.example:443?transport=tcp, turn:t.example:3478', secret: 'shh' } } }, { who: 'seat42', now: nowS })[1];
+  eq(eph.username, `${nowS / 1000 + TURN_TTL_S}:seat42`, 'an ephemeral TURN username is expiry:seat');
+  eq(eph.credential, (await import('node:crypto')).default.createHmac('sha1', 'shh').update(eph.username).digest('base64'), 'and its credential is HMAC-SHA1(secret, username) - the TURN REST scheme');
+  eq(eph.urls, ['turns:t.example:443?transport=tcp', 'turn:t.example:3478'], 'several TURN urls are kept, TLS first');
+  ok(!JSON.stringify(eph).includes('shh'), 'the shared secret itself is never in the ICE list');
+  ok(iceServers({ talent: { turn: { url: 'http://evil', username: 'u', credential: 'c' } } }).length === 1, 'only turn: / turns: urls are accepted');
 
   // a bad role is refused rather than left half-connected
   const bad = new WebSocket(url('nonsense', 'caster1'));
@@ -945,6 +1003,7 @@ console.log('\n== http: request guard ==');
     ok(!allow(PRODUCER, 'POST', p, CAPS).ok, `a producer cannot POST ${p}`);
   }
   ok(!allow(PRODUCER, 'GET', '/api/update', CAPS).ok, 'a producer cannot reach the updater');
+  ok(!allow(PRODUCER, 'POST', '/api/gsi/lan', CAPS).ok && !allow(PRODUCER, 'GET', '/api/gsi/lan', CAPS).ok, 'no seat can open the rig to the LAN, or read its addresses');
   ok(!allow(PRODUCER, 'GET', '/api/remote', CAPS).ok, 'a seat cannot read the seat list');
   ok(!allow(PRODUCER, 'POST', '/api/remote/invite', CAPS).ok, 'a seat cannot mint another invite');
 
@@ -995,11 +1054,14 @@ console.log('\n== http: request guard ==');
   liveState.settings.obsPassword = 'hunter2';
   liveState.settings.startggToken = 'sgg';
   liveState.settings.vdo = { room: 'cta-room', password: 'vdo-pass' };
+  liveState.settings.talent = { ...(liveState.settings.talent || {}), turn: { url: 'turns:turn.example:443', username: 'turn-user', credential: 'turn-pass', secret: 'turn-secret' } };
   const out = redactState(liveState, { role: 'producer' });
   for (const p of SECRET_PATHS) {
     const got = p.split('.').reduce((o, k) => (o == null ? o : o[k]), out);
     eq(got, '', `${p} is blanked for a remote seat`);
   }
+  eq(out.settings.talent.turn.url, 'turns:turn.example:443', 'the TURN url is not a secret (the desk can see one is set)');
+  ok(!JSON.stringify(out).includes('turn-pass') && !JSON.stringify(out).includes('turn-secret') && !JSON.stringify(out).includes('turn-user'), 'no TURN credential, secret or username reaches a remote seat');
   eq(liveState.settings.obsPassword, 'hunter2', 'redaction copies - the agent keeps its own password');
   eq(out.settings.vdo.room, 'cta-room', 'the VDO room survives (only the password is a secret)');
   eq(out.settings.obsCollectionName, liveState.settings.obsCollectionName, 'everything else comes through untouched');
@@ -1015,6 +1077,47 @@ console.log('\n== http: request guard ==');
   eq(shot.get('cut'), null, 'and cannot ask the rig to cut program for the shot');
   eq(shot.get('scene'), '04', 'while the scene it asked for is kept');
   eq(new URLSearchParams(shotQuery('w=240')).get('w'), '240', 'a smaller width is left alone');
+
+  // --- talent seats: the join page and ONE slot's signaling, nothing else -----
+  console.log('\nremote seats - talent');
+  const { allowChannel, allowTalent } = await import('./remote-policy.js');
+  const TALENT = seat('talent', { slot: 'caster2' });
+  const UNBOUND = seat('talent');
+  ok(allow(TALENT, 'GET', '/overlays/talent/join.html', CAPS).ok, 'a talent seat can load its join page');
+  for (const [m, p, why] of [
+    ['GET', '/api/state', 'the desk (and its secrets)'],
+    ['GET', '/api/remote/me', 'who-am-I (no /api at all)'],
+    ['GET', '/api/talent', 'the slot table'],
+    ['GET', '/healthz', 'healthz'],
+    ['GET', '/api/obs/shot', 'program thumbnails'],
+    ['POST', '/api/state', 'a state patch'],
+    ['POST', '/api/obs/take', 'the air'],
+    ['GET', '/packs/cs2/assets/teams/vitality.png', 'pack assets'],
+    ['GET', '/packs/cs2/overlay/ingame.html', 'a pack overlay'],
+    ['GET', '/overlays/talent/view.html', 'the OBS receiver page (it would hand them the other side of a call)'],
+    ['GET', '/overlays/_shared/render.js', 'other overlay files'],
+    ['GET', '/overlays/talent/join.html/../view.html', 'a path that walks out of the page'],
+    ['POST', '/overlays/talent/join.html', 'a POST to its own page'],
+  ]) ok(!allow(TALENT, m, p, CAPS).ok, `a talent seat cannot ${m} ${p} - ${why}`);
+  ok(!allow(TALENT, 'POST', '/api/obs/stream', { caps: { streamControl: true } }).ok, 'not even with every cap switched on');
+  eq(allow(UNBOUND, 'GET', '/overlays/talent/join.html', CAPS).status, 403, 'a talent seat the rig never bound to a slot gets nothing, not even the page');
+  ok(!allowTalent(PRODUCER, 'GET', '/overlays/talent/join.html').ok, 'and allowTalent is only for talent seats');
+  ok(!allow(PRODUCER, 'GET', '/overlays/talent/join.html', CAPS).ok, 'a producer seat does not get the talent page either (deny by default)');
+
+  // Sockets: talent -> its bound slot's signaling, as caster; everyone else -> the hub only.
+  eq(allowChannel(TALENT, '/talent/signaling'), { ok: true, kind: 'talent', role: 'caster', slot: 'caster2' }, 'a talent seat gets its bound slot, as the caster');
+  ok(!allowChannel(TALENT, '/ws').ok, 'a talent seat cannot open the hub (no state, no OBS, no log)');
+  ok(!allowChannel(UNBOUND, '/talent/signaling').ok, 'an unbound talent seat gets no signaling');
+  ok(!allowChannel({ ...TALENT, slot: 'caster9' }, '/talent/signaling').ok && !allowChannel({ ...TALENT, slot: '../x' }, '/talent/signaling').ok, 'a slot outside caster1..8 is refused');
+  eq(allowChannel(PRODUCER, '/ws'), { ok: true, kind: 'hub' }, 'a producer gets the hub');
+  eq(allowChannel(PRODUCER, undefined).kind, 'hub', 'a relay that does not say which socket means /ws');
+  ok(!allowChannel(PRODUCER, '/talent/signaling').ok && !allowChannel(VIEWER, '/talent/signaling').ok, 'no desk seat can open talent signaling (it could take a slot or watch a call)');
+  ok(!allowChannel(PENDING, '/ws').ok, 'a seat at the door gets no socket');
+  ok(!allowChannel(null, '/ws').ok, 'no seat, no socket');
+  // Over the hub socket a talent seat is nobody.
+  ok(!allowHubMessage(TALENT, { type: 'patch', data: { series: { scoreA: 1 } } }, CAPS).ok, 'a talent seat cannot patch the desk');
+  ok(!allowHubMessage(TALENT, { type: 'obs', action: 'take' }, CAPS).ok, 'nor drive OBS');
+  ok(!allowPatch(TALENT, { talent: [] }).ok, 'nor rewrite the talent list');
 }
 
 

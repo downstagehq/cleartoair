@@ -3,6 +3,7 @@
 // and answer 200 as fast as possible (the game blocks on the response up to its `timeout`).
 
 import http from 'node:http';
+import { admit, normalizeIp } from './_lan.js';
 
 /**
  * Logger shim. The agent core's `log` is `{ info(tag, msg), warn(tag, msg) }`; tests may pass a plain
@@ -45,18 +46,36 @@ export function resolveToken({ config, getState, state }) {
 }
 
 /**
- * createGsiServer({ port, host, tag, log, getToken, onPayload, capture }) -> { start, stop, lastAt, stats }
+ * createGsiServer({ port, host, tag, log, getToken, onPayload, capture, getLan }) -> { start, stop, lastAt, stats, lan }
+ * `getLan()` (optional) -> { enabled, allow } (see _lan.js). Read at start() for the bind address
+ * (0.0.0.0 when enabled, else `host`) and on every POST for who may send.
  * `capture(payload)` (optional, from the registry) sees every accepted payload as the game sent it,
  * before parsing - the "Record raw game data" switch. It strips the token itself.
  */
-export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, onPayload, capture }) {
+export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, onPayload, capture, getLan = () => ({ enabled: false, allow: [] }) }) {
   const L = makeLogger(log, tag);
   let server = null;
   let lastAt = 0;
   let badTokenLogged = false;
-  const stats = { received: 0, rejected: 0, malformed: 0 };
+  const stats = { received: 0, rejected: 0, malformed: 0, refused: 0 };
+  let boundHost = null;
+  const refusedFrom = new Map(); // ip -> { count, last, reason }: shown in preflight, logged once per address
 
   function handle(req, res) {
+    // Who may send at all, before reading a byte: loopback always, the LAN only by allow-list.
+    const from = req.socket && req.socket.remoteAddress;
+    const gate = admit(from, getLan());
+    if (!gate.ok) {
+      const ip = normalizeIp(from) || String(from || '?');
+      stats.refused++;
+      const seen = refusedFrom.get(ip);
+      if (!seen) { if (refusedFrom.size >= 32) refusedFrom.delete(refusedFrom.keys().next().value); L(`refused game data from ${ip}: ${gate.reason}`, 'warn'); }
+      refusedFrom.set(ip, { count: (seen ? seen.count : 0) + 1, last: Date.now(), reason: gate.reason });
+      res.writeHead(gate.status, { 'Content-Type': 'text/plain', Connection: 'close' });
+      res.end('not allowed');
+      req.resume();
+      return;
+    }
     if (req.method !== 'POST') {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end(`${tag} receiver up — the game POSTs here.`);
@@ -89,20 +108,28 @@ export function createGsiServer({ port, host = '127.0.0.1', tag, log, getToken, 
   return {
     start: () => new Promise((resolve, reject) => {
       if (server) return resolve();
+      const lan = getLan();
+      const bind = lan && lan.enabled ? '0.0.0.0' : host;
       server = http.createServer(handle);
       server.keepAliveTimeout = 65_000;
-      server.on('error', (e) => { L(`listen error on ${host}:${port}: ${e.code || e.message}`); server = null; reject(e); });
-      server.listen(port, host, () => { L(`listening on http://${host}:${port}/`); resolve(); });
+      server.on('error', (e) => { L(`listen error on ${bind}:${port}: ${e.code || e.message}`); server = null; boundHost = null; reject(e); });
+      server.listen(port, bind, () => {
+        boundHost = bind;
+        L(`listening on http://${bind}:${port}/${bind === '0.0.0.0' ? ` - LAN on, allowed: ${lan.allow.join(', ') || 'nobody yet'}` : ''}`);
+        resolve();
+      });
     }),
     stop: () => new Promise((resolve) => {
       if (!server) return resolve();
-      const s = server; server = null;
+      const s = server; server = null; boundHost = null;
       s.closeAllConnections?.();
       s.close(() => resolve());
     }),
     get lastAt() { return lastAt; },
     get listening() { return !!server; },
     stats,
+    /** Where it is bound and who was turned away (preflight, GET /api/gsi/lan). */
+    lan: () => ({ boundHost, port, refused: [...refusedFrom].map(([ip, r]) => ({ ip, ...r })) }),
   };
 }
 

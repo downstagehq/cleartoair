@@ -7,7 +7,8 @@ import { WEB_DIST, PACKS_DIR, OVERLAYS_DIR, REPORTS_DIR } from './config.js';
 import { build, install, summarize, obsRunning, REPLAY_SOURCE, GAME_SOURCE } from './obs/collection.js';
 import { syncGame } from './obs/sync.js';
 import { gameSwitchPatch, newEventState, defaultRundown, rosterSize } from './game.js';
-import { OBS_SCENES_DIR, UPDATE_URL, EXTRA_ORIGINS } from './config.js';
+import { OBS_SCENES_DIR, UPDATE_URL, EXTRA_ORIGINS, PORTS } from './config.js';
+import { lanConfig, lanAddresses, observerCfg, parseAllow } from './adapters/_lan.js';
 import { checkForUpdate, currentVersion, installKind } from './update.js';
 import { diff } from './obs/drift.js';
 import { parseScoreboard } from './stats/scoreboard.js';
@@ -164,6 +165,19 @@ function routes(ctx) {
   const contactEmail = () => state.get().settings?.contactEmail || state.get().event?.contact || 'https://cleartoair.com';
   const lpConfig = () => ({ contactEmail: contactEmail(), version: currentVersion() });
   const desired = () => build({ state: state.get(), pack: currentPack(), root: ctx.root, port });
+  /** LAN listening as it stands: the setting, this PC's addresses, each receiver's bind, and the cfg for the observer PC. */
+  const gsiLanInfo = () => {
+    const lan = lanConfig(state.get());
+    const addresses = lanAddresses();
+    const rig = addresses[0] ? addresses[0].address : null;
+    const observer = [];
+    for (const [id, game, gport] of [['cs2gsi', 'CS2', PORTS.cs2gsi], ['dota2gsi', 'Dota 2', PORTS.dota2gsi]]) {
+      let file = null;
+      try { file = (registry.installAdapter(id).files || [])[0] || null; } catch { /* adapter missing */ }
+      if (file) observer.push({ id, game, port: gport, path: file.path, uri: rig ? `http://${rig}:${gport}/` : null, content: rig ? observerCfg(file.content, rig, gport) : null });
+    }
+    return { ok: true, ...lan, addresses, receivers: registry.gsiLan(), observer };
+  };
 
   return [
     ['GET', /^\/healthz$/, () => {
@@ -347,6 +361,21 @@ function routes(ctx) {
       return { ok: true };
     }],
     ['GET', /^\/api\/adapters$/, () => registry.adapters()],
+    // Observer PC: the GSI receivers may take game data from listed LAN addresses (adapters/_lan.js).
+    // Local operator only - neither route is in remote-policy.js, so no seat can open the rig to a LAN.
+    ['GET', /^\/api\/gsi\/lan$/, () => gsiLanInfo()],
+    ['POST', /^\/api\/gsi\/lan$/, async ({ body }) => {
+      const { allow, rejected } = parseAllow(body.allow);
+      if (rejected.length) return { status: 400, json: { ok: false, error: rejected.map((r) => `${r.value}: ${r.reason}`).join('; '), rejected } };
+      const enabled = body.enabled === true;
+      const before = lanConfig(state.get());
+      state.patch({ settings: { gsiLan: { enabled, allow } } });
+      const want = enabled ? '0.0.0.0' : '127.0.0.1';
+      const stale = registry.gsiLan().some((r) => r.boundHost && r.boundHost !== want);
+      const rebound = before.enabled !== enabled || stale ? await registry.rebindGsi() : [];
+      log.info('gsi', enabled ? `LAN on - game data accepted from ${allow.join(', ') || 'nobody yet (add an address)'}` : 'LAN off - game data from this PC only');
+      return { ...gsiLanInfo(), rebound };
+    }],
     // Start is remembered in agent/data/adapters.json and comes back after a restart; Stop forgets it.
     ['POST', /^\/api\/adapters\/([^/]+)\/(start|stop)$/, ({ params, body }) => (params[1] === 'start' ? registry.startAdapter(params[0], { config: body.config }) : registry.stopAdapter(params[0]))],
     // GET = the cfg text and the manual steps; POST = write the cfg into the game's
@@ -444,6 +473,9 @@ function routes(ctx) {
     ['POST', /^\/api\/remote\/(enable|disable)$/, ({ params, body }) => remote().enable({ relayUrl: body.relayUrl, on: params[0] === 'enable' })],
     ['POST', /^\/api\/remote\/caps$/, ({ body }) => remote().setCaps(body)],
     ['POST', /^\/api\/remote\/invite$/, ({ body }) => remote().invite(body)],
+    // A caster's camera link, bound to one slot. Local only, like every route
+    // here: a seat in the hosted room cannot mint one.
+    ['POST', /^\/api\/remote\/talent-invite$/, ({ body }) => remote().talentInvite({ slot: String(body.slot || ''), name: body.name, ttlMs: body.ttlMs })],
     ['POST', /^\/api\/remote\/revoke$/, ({ body }) => remote().revoke(body.code)],
     ['POST', /^\/api\/remote\/admit$/, ({ body }) => remote().admit(String(body.seat || ''), body.ok !== false)],
     ['POST', /^\/api\/remote\/kick$/, ({ body }) => remote().kick(String(body.seat || ''))],

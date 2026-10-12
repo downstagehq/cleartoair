@@ -4,6 +4,7 @@
 // The cfg requests Valve's observer data set, including "map_round_wins" (without it map.round_wins is never sent).
 
 import { createGsiServer, gsiStatus, resolveToken, resolveOpts } from './_gsi.js';
+import { lanConfig } from './_lan.js';
 import { normalize, prettyWeapon, pushEvent, fmtClock } from './_normalize.js';
 
 export const id = 'cs2gsi';
@@ -139,6 +140,7 @@ export function create({ config, emit, log, state, getState, capture } = {}) {
   let last = null;
   const srv = createGsiServer({
     port, host, tag: id, log, capture,
+    getLan: () => lanConfig(getState?.()),
     getToken: () => resolveToken({ config, getState }),
     onPayload: (p) => {
       const raw = parsePayload(p, ctx);
@@ -151,6 +153,7 @@ export function create({ config, emit, log, state, getState, capture } = {}) {
     stop: async () => { await srv.stop(); emit?.({ source: id, connected: false }); },
     status: () => gsiStatus(srv, 15_000, last ? `${last.mapName} ${last.sides.left.score}-${last.sides.right.score} ${last.phase}` : ''),
     parse: (p) => parsePayload(p, ctx), // for tests
+    lan: () => srv.lan(),
   };
 }
 
@@ -202,7 +205,7 @@ export function install({ config, state, getState } = {}) {
       `   a playing client only sends its own player block.`,
       `4. Token "${token}" is the current settings.gsiToken; mismatches are rejected with 401 and logged once.`,
       `   If the token is changed or regenerated, press Install again and restart CS2.`,
-      `5. The observer client must run on this PC for now (the receiver only listens on 127.0.0.1).`,
+      `5. Observer on another PC: Data tab > Observer PC. Turn LAN on, add that PC's address, and use the cfg it shows there.`,
     ].join('\n'),
   };
 }

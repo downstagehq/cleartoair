@@ -11,7 +11,11 @@
 //   GET  /waiting               held at the door until the desk admits you
 //   *    /api/**  /healthz      tunnelled to the rig, stamped with your seat
 //   GET  /packs/**              tunnelled (team logos, player photos)
+//   GET  /overlays/talent/**    tunnelled: the talent join page (a talent seat's
+//                               whole world - the agent refuses it everything else)
 //   GET  /ws                    tunnelled WebSocket (state, OBS status, log)
+//   GET  /talent/signaling      tunnelled WebSocket: one slot's WebRTC signaling.
+//                               Media itself goes peer to peer, never through here.
 //   GET  /__agent?room=&key=    the rig dials in here
 //   GET  /__health              is the relay itself up
 //
@@ -24,10 +28,25 @@
 //    That is what stops a third-party page (or an OBS browser source running
 //    someone's widget) from driving the desk with a borrowed cookie.
 
-import { SEAT_COOKIE, isRoomId, normalizeCode, readCookie, cleanName } from './protocol.js';
+import { SEAT_COOKIE, TALENT_PAGE, isRoomId, normalizeCode, readCookie, cleanName } from './protocol.js';
 export { Room } from './room.js';
 
-const TUNNEL = /^\/(api\/|packs\/|healthz$)/;
+const TUNNEL = /^\/(api\/|packs\/|overlays\/talent\/|healthz$)/;
+const SOCKETS = new Set(['/ws', '/talent/signaling']);
+
+/**
+ * Sec-Fetch-Site must be same-origin on everything tunnelled, with ONE
+ * exception: a top-level visit to the talent page itself. A caster reopens it
+ * from a bookmark or the browser's history ("none"), and that page carries no
+ * data - it only asks for camera and mic and waits for a press. Its socket
+ * and everything else still has to be same-origin.
+ */
+function fetchSiteOk(request, path) {
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (!site || site === 'same-origin') return true;
+  return site === 'none' && request.method === 'GET' && path === TALENT_PAGE
+    && request.headers.get('Sec-Fetch-Mode') === 'navigate';
+}
 
 export default {
   async fetch(request, env) {
@@ -51,15 +70,15 @@ export default {
 
     // Everything the control room asks the rig for.
     const seat = seatFromCookie(request);
-    if (TUNNEL.test(path) || path === '/ws') {
-      if (request.headers.get('Sec-Fetch-Site') && request.headers.get('Sec-Fetch-Site') !== 'same-origin') {
+    if (TUNNEL.test(path) || SOCKETS.has(path)) {
+      if (!fetchSiteOk(request, path)) {
         return json({ ok: false, error: 'cross-site request refused' }, 403);
       }
       if (!seat) return json({ ok: false, error: 'no seat - open your invite link again' }, 401);
       const stub = roomStub(env, seat.room);
-      if (path === '/ws') {
+      if (SOCKETS.has(path)) {
         return stub.fetch(new Request('https://room/__ws', {
-          headers: withSeat(request.headers, seat, { Upgrade: 'websocket' }),
+          headers: withSeat(request.headers, seat, { Upgrade: 'websocket', 'X-Cta-Path': path }),
         }));
       }
       const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text();
@@ -129,9 +148,13 @@ async function doorHandler(request, env, room, code) {
 
   const token = res.headers.get('X-Cta-Seat-Token') || '';
   const cookie = `${SEAT_COOKIE}=${room}.${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${14 * 60 * 60}`;
+  // A talent seat has one page; everyone else gets the control room (or the
+  // waiting room, for a producer the desk still has to admit).
+  const seat = body.seat || {};
+  const where = seat.role === 'talent' ? TALENT_PAGE : seat.pending ? '/waiting' : '/';
   return new Response(null, {
     status: 303,
-    headers: { Location: body.seat && body.seat.pending ? '/waiting' : '/', 'Set-Cookie': cookie, 'Cache-Control': 'no-store' },
+    headers: { Location: where, 'Set-Cookie': cookie, 'Cache-Control': 'no-store' },
   });
 }
 
@@ -158,8 +181,10 @@ code{font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--brass)}
 </style>`;
 
 function namePage(room, code) {
-  return `${SHELL}<title>Join the control room — Clear to Air</title>
-<main><h1>Clear to Air</h1><p>You have been given a seat at a live control room. Put your name in so the desk knows who is on it.</p>
+  // Role-neutral on purpose: the door does not ask the room what the code is
+  // for, so the same page serves a producer's seat and a caster's camera link.
+  return `${SHELL}<title>Join the show — Clear to Air</title>
+<main><h1>Clear to Air</h1><p>You have been invited to a live show. Put your name in so the desk knows who you are.</p>
 <form method="post" action="/j/${esc(room)}/${esc(code)}">
 <label for="n">Your name</label>
 <input id="n" name="name" autocomplete="name" maxlength="24" placeholder="e.g. Lerato on graphics" autofocus>

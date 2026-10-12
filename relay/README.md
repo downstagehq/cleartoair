@@ -69,6 +69,10 @@ account, wrangler makes the DNS record. Downstage's own copy runs at
 `https://room.cleartoair.com` (see `wrangler.toml`), free while remote seats are in beta.
 The agent only ever needs an address pasted in once.
 
+**Talent seats (0.3.3)** need a relay deployed from 0.3.3 or later: an older relay refuses the
+`talent` role, and everything else keeps working against it (desk seats are compatible both
+ways; `relay/test/e2e.mjs` from 0.3.2 passes against a 0.3.3 agent).
+
 ## How a seat happens
 
 1. The operator presses **Producer**, **Scorer** or **Viewer** on the rig. The

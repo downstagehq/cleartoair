@@ -279,7 +279,32 @@ export function createRegistry({ state, hub, adaptersDir = ADAPTERS_DIR, simDir 
     await captures.flushed().catch(() => {});
   }
 
+  /** Running GSI receivers: where each is bound and who it turned away (LAN listening, preflight). */
+  function gsiLan() {
+    return [...adapters.values()]
+      .filter((a) => a.running && a.instance && typeof a.instance.lan === 'function')
+      .map((a) => ({ id: a.id, label: a.label, ...a.instance.lan() }));
+  }
+
+  /** LAN switched on or off: the running GSI receivers bind again. They stay on the restart list. */
+  async function rebindGsi() {
+    const out = [];
+    for (const a of adapters.values()) {
+      if (!a.running || !a.instance || typeof a.instance.lan !== 'function') continue;
+      await a.instance.stop();
+      try { await a.instance.start(); out.push({ id: a.id, ok: true, ...a.instance.lan() }); }
+      catch (e) {
+        a.running = false;
+        out.push({ id: a.id, ok: false, error: e.code || e.message });
+        log.warn('registry', `${a.id} could not bind again: ${e.code || e.message} - press Start on the Data tab`);
+      }
+    }
+    announce();
+    return out;
+  }
+
   return {
+    gsiLan, rebindGsi,
     load, restore, adapters: adapterList, sims: simList, snapshot, startAdapter, stopAdapter, installAdapter, writeInstall,
     captureStatus, setCapture, startSim, stopSim, runAdapter, runningAdapters, runningSims, feedsFor, stopAll,
   };

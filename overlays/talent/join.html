@@ -35,6 +35,9 @@
       color: #94a3b8;
     }
     .badge.connected { background: #059669; color: #fff; }
+    /* Same colours as docs/talent-quickstart.html, the card the caster is sent. */
+    .badge.warn { background: #d97706; color: #fff; }
+    .badge.bad { background: #dc2626; color: #fff; }
     main {
       flex: 1;
       display: flex;
@@ -117,6 +120,19 @@
     .btn-live { background: #4f46e5; color: white; }
     .btn-live:hover { background: #4338ca; }
     .btn-live.active { background: #dc2626; }
+    .slot { font: 700 11px/1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .08em; color: #94a3b8; margin-left: 8px; }
+    .hint { font-size: 12px; color: #94a3b8; line-height: 1.45; margin: 0; }
+    /* A phone held upright: picture on top, controls under it, big button. */
+    @media (max-width: 760px) {
+      body { height: auto; min-height: 100vh; overflow: auto; }
+      header { padding: 12px 16px; }
+      header h1 { font-size: 15px !important; }
+      header p { display: none; }
+      main { flex-direction: column; padding: 12px; gap: 12px; }
+      .preview-pane { flex: none; height: 42vh; }
+      .controls-pane { padding: 16px; gap: 14px; }
+      .btn-action { padding: 18px; font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -125,7 +141,7 @@
       <h1 style="margin:0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">CLEAR TO AIR · TALENT STUDIO</h1>
       <p style="margin: 2px 0 0 0; color: #64748b; font-size: 12px;">Unified A/V Stream · Zero Audio Drop Guarantee</p>
     </div>
-    <div id="status-badge" class="badge">OFFLINE</div>
+    <div><span id="status-badge" class="badge">OFFLINE</span><span id="slot-label" class="slot"></span></div>
   </header>
 
   <main>
@@ -151,6 +167,8 @@
         </div>
       </div>
 
+      <p class="hint">Wear headphones. Keep this page open and the screen on while you are live.</p>
+
       <div style="margin-top: auto;">
         <button id="btn-toggle-live" class="btn-action btn-live" onclick="toggleStream()">
           <span>CONNECT TO OBS</span>
@@ -165,10 +183,14 @@
     const signalingHost = window.location.host || '127.0.0.1:7700';
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+    // The agent sends the ICE list (STUN, plus TURN if the rig has one) as the
+    // first message on the signaling socket - one place, for this page and
+    // view.html. This is only the fallback until it arrives.
+    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     const RETRY_MS = 2000;
 
     let localStream = null;
+    let wakeLock = null;
     let pc = null;
     let ws = null;
     let audioContext = null;
@@ -272,6 +294,7 @@
       setButton(true);
       setBadge('CONNECTING…', 'badge');
       openSignaling(true);
+      keepAwake();
     }
 
     function wsSend(obj) {
@@ -285,7 +308,7 @@
       if (!localStream || !ws || ws.readyState !== WebSocket.OPEN) return;
       const my = ++seq;
       if (pc) { pc.onicecandidate = null; pc.close(); }
-      const p = pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const p = pc = new RTCPeerConnection({ iceServers });
       localStream.getTracks().forEach((track) => p.addTrack(track, localStream));
 
       // Hold candidates until the offer is out, so none can reach the hub
@@ -315,15 +338,19 @@
     // socket dropped (agent restart, network blip): media goes peer to peer and
     // does not need the agent, so a call that is still connected is kept as it
     // is; only a dead one is renegotiated.
+    //
+    // On the room relay (a phone on another network) the same socket path is
+    // tunnelled to the rig, which puts this page in the slot its invite was
+    // made for; ?slot= is only used on the broadcast PC itself.
     function openSignaling(fresh) {
       clearTimeout(retryTimer);
       const sock = new WebSocket(`${wsProto}//${signalingHost}/talent/signaling?role=caster&slot=${encodeURIComponent(slot)}`);
       ws = sock;
+      let configured = false;
 
       sock.onopen = () => {
         if (ws !== sock) return;
         setBadge('CONNECTED · LIVE', 'badge connected');
-        if (fresh || !pc || pc.connectionState !== 'connected') startPeer();
       };
 
       sock.onmessage = async (e) => {
@@ -332,7 +359,16 @@
         try { msg = JSON.parse(e.data); } catch { return; }
         const current = msg.seq == null || msg.seq === seq;
         try {
-          if (msg.type === 'RENEGOTIATE') {
+          if (msg.type === 'CONFIG') {
+            // Always first on the socket: the ICE servers to use, and the slot
+            // the rig put us in. Only then is it safe to make an offer.
+            if (Array.isArray(msg.iceServers) && msg.iceServers.length) iceServers = msg.iceServers;
+            if (msg.slot) document.getElementById('slot-label').textContent = msg.slot.toUpperCase();
+            if (!configured) {
+              configured = true;
+              if (fresh || !pc || pc.connectionState !== 'connected') await startPeer();
+            }
+          } else if (msg.type === 'RENEGOTIATE') {
             await startPeer();
           } else if (msg.type === 'answer' && pc && current) {
             if (pc.signalingState === 'have-local-offer') await pc.setRemoteDescription(msg.answer);
@@ -354,7 +390,17 @@
           setBadge('OPENED ELSEWHERE', 'badge');
           return;
         }
-        setBadge('RECONNECTING…', 'badge');
+        if (e.code === 4003 || e.code === 4008) {
+          // The desk closed this link (or it was never valid for this slot).
+          // Retrying would only knock on a locked door.
+          disconnect();
+          setBadge('LINK CLOSED', 'badge bad');
+          return;
+        }
+        // Anything else - the agent restarting, the relay redeploying, the
+        // phone's network blinking - is worth waiting out. The call itself is
+        // peer to peer and keeps going while we are away.
+        setBadge('RECONNECTING…', 'badge warn');
         retryTimer = setTimeout(() => { if (isLive) openSignaling(false); }, RETRY_MS);
       };
     }
@@ -370,7 +416,17 @@
       pc = null;
       setBadge('OFFLINE', 'badge');
       setButton(false);
+      releaseWake();
     }
+
+    // Keep a phone's screen on while live: a locked screen stops the camera.
+    // Best effort - not every browser has it, and it lapses when the tab is
+    // hidden, so it is asked for again on the way back.
+    async function keepAwake() {
+      try { if (isLive && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch { /* not allowed here */ }
+    }
+    function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch { /* gone */ } wakeLock = null; }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
 
     // Closing or reloading the tab is leaving on purpose too: say so, so the OBS
     // side clears at once instead of holding a frozen frame until ICE times out.
@@ -379,6 +435,13 @@
     window.onload = async () => {
       await getDevices();
       await startPreview();
+      // Device names only show up once the camera/mic prompt has been answered;
+      // list them again so a phone shows "Front camera", not "Camera 1".
+      const v = document.getElementById('video-select').value;
+      const a = document.getElementById('audio-select').value;
+      await getDevices();
+      if (v) document.getElementById('video-select').value = v;
+      if (a) document.getElementById('audio-select').value = a;
       document.getElementById('video-select').onchange = startPreview;
       document.getElementById('audio-select').onchange = startPreview;
     };

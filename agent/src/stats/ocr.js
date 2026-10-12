@@ -9,20 +9,25 @@
 //
 // What the engine gets wrong, and what this file does about it:
 //  - It treats each table column as its own text block and DROPS short isolated
-//    tokens (a lone "4" in the A column, an "FB" of 0). It almost never misreads
-//    a digit - it leaves holes. So we find the text cells from the pixel
-//    gradient, normalise each to dark-on-white, and pack every scoreboard row
-//    into one tight text line ("Zephyr 298 22 14 4 71 5"), which it reads well.
+//    tokens (a lone "4" in the A column, a PLANTS of 0). It almost never
+//    misreads a digit - it leaves holes. So we find the text cells from the
+//    pixel gradient, normalise each to dark-on-white, and pack every
+//    scoreboard row into one tight text line ("Zephyr 298 22 14 4 71 5").
 //  - Which cells it drops depends on the whole layout, so the image is read in
 //    several layouts (all in ONE PowerShell start-up) and every cell is decided
-//    by vote. Reads that disagree are left blank with a warning - never guessed.
+//    by vote. Single-glyph cells also get "probe" layouts (the cell between two
+//    copies of a neighbouring number) and need two agreeing reads. Reads that
+//    disagree, or a single-glyph cell read only once, are left blank with a
+//    warning - never guessed.
 //  - A word that straddles two cells ("14 4" read as "144") is thrown away.
 // Word boxes are mapped back to the original image's pixels, then rows and
 // columns are rebuilt into the plain text scoreboard.js already parses, so the
 // paste parser stays the one source of truth for state.stats.scoreboard.
 //
-// Nothing from here goes to air unconfirmed: the route answers a preview and
-// the operator applies it (docs/OCR-PLAN.md).
+// The whole read - decoding, the layouts, starting PowerShell (a synchronous
+// CreateProcess, 5-30 ms on Windows) and the vote - runs in a worker thread
+// (ocr-worker.js): the agent's event loop only waits for one message. Nothing from here goes to air unconfirmed: the route
+// answers a preview and the operator applies it (docs/OCR-PLAN.md).
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -30,24 +35,30 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { decodeLuma, encodeGray, isPng } from './png.js';
+import { decodeJpegLuma, isJpeg } from './jpeg.js';
 import { isAgent, parseKda } from './scoreboard.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PS_SCRIPT = path.join(HERE, 'ocr-windows.ps1');
+const WORKER = path.join(HERE, 'ocr-worker.js');
 
 const INK_T = 40; // |dL/dx| that counts as a glyph edge (0-255)
 
 /**
  * The layouts each image is read in (tuned on fixtures/). `raw` is the image
- * as captured; the others are composites (see buildComposite).
+ * as captured; `trim` reads cells without their last glyph (percent columns
+ * only); `probe` reads single-glyph cells between two copies of a neighbour.
  */
 export const DEFAULT_VARIANTS = [
   { perBlob: true, targetH: 52 },
   { perBlob: false, targetH: 40 },
   { perBlob: true, targetH: 40 },
   { raw: true },
-  { perBlob: true, targetH: 52, trim: true }, // read only for percent columns (word.cut)
+  { perBlob: true, targetH: 52, trim: true },
+  { probe: true, targetH: 48, wide: true }, // one- and two-glyph cells
+  { probe: true, targetH: 64 },             // one-glyph cells
 ];
 
 const NOT_WINDOWS = 'image OCR needs Windows (it uses the Windows built-in OCR engine) - paste the scoreboard text instead';
@@ -60,11 +71,21 @@ function percentile(arr, p) {
   return a[Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))))];
 }
 
+/** PNG or JPEG -> { width, height, luma }. Throws a 415 for anything else. */
+export function decodeImage(buf) {
+  if (isPng(buf)) return decodeLuma(buf);
+  if (isJpeg(buf)) return decodeJpegLuma(buf);
+  throw Object.assign(new Error('send a PNG or JPEG image'), { status: 415 });
+}
+
 /**
- * Find text bands (lines) and the blobs (words / table cells) in each, from the
- * horizontal luma gradient. Horizontal rules and flat row backgrounds have no
- * horizontal gradient, so they never count as ink.
- * @returns {{y0:number,y1:number,blobs:{x0:number,x1:number,y0:number,y1:number}[]}[]}
+ * Find text bands (lines) and the blobs (words / table cells) in each.
+ * Ink is a glyph STROKE: a strong horizontal luma step followed, within a
+ * stroke width, by a step the other way. One-sided steps (the edge of a row
+ * background, an icon tile) are not ink, and neither is any ink run taller
+ * than ~9% of the image (grid lines, background texture, a minimap frame).
+ * Blobs get a stable numeric id and `narrow` (about one glyph wide).
+ * @returns {{y0:number,y1:number,blobs:{id:number,x0:number,x1:number,y0:number,y1:number,narrow:boolean}[]}[]}
  */
 export function findBlobs(img, { crop = null } = {}) {
   const { width: W, height: H, luma } = img;
@@ -72,15 +93,40 @@ export function findBlobs(img, { crop = null } = {}) {
   const cy0 = crop ? Math.max(0, crop.y | 0) : 0;
   const cx1 = crop ? Math.min(W, (crop.x + crop.w) | 0) : W;
   const cy1 = crop ? Math.min(H, (crop.y + crop.h) | 0) : H;
+  const maxStroke = Math.max(8, Math.round(H * 0.016));
+  const maxRun = Math.max(40, Math.round(H * 0.09));
 
   const ink = new Uint8Array(W * H);
-  const rowInk = new Uint32Array(H);
+  const ex = new Int32Array(W), es = new Int8Array(W);
   for (let y = cy0; y < cy1; y++) {
     const o = y * W;
     let n = 0;
     for (let x = cx0; x < cx1 - 1; x++) {
-      if (Math.abs(luma[o + x + 1] - luma[o + x]) >= INK_T) { ink[o + x] = 1; n++; }
+      const d = luma[o + x + 1] - luma[o + x];
+      if (d >= INK_T || d <= -INK_T) { ex[n] = x; es[n] = d > 0 ? 1 : -1; n++; }
     }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n && ex[j] - ex[i] <= maxStroke; j++) {
+        if (es[j] !== es[i]) { ink[o + ex[i]] = 1; ink[o + ex[j]] = 1; break; }
+      }
+    }
+  }
+  // Erase tall vertical ink runs: lines and frames, not text.
+  for (let x = cx0; x < cx1; x++) {
+    let s = -1;
+    for (let y = cy0; y <= cy1; y++) {
+      const on = y < cy1 && (ink[y * W + x] || (y + 1 < cy1 && ink[(y + 1) * W + x] && s >= 0));
+      if (on) { if (s < 0) s = y; } else if (s >= 0) {
+        if (y - s > maxRun) for (let k = s; k < y; k++) ink[k * W + x] = 0;
+        s = -1;
+      }
+    }
+  }
+  const rowInk = new Uint32Array(H);
+  for (let y = cy0; y < cy1; y++) {
+    let n = 0;
+    const o = y * W;
+    for (let x = cx0; x < cx1; x++) n += ink[o + x];
     rowInk[y] = n;
   }
 
@@ -94,8 +140,25 @@ export function findBlobs(img, { crop = null } = {}) {
   bands = bands.filter((b) => b.y1 - b.y0 >= 6);
   if (!bands.length) return [];
   const medH = percentile(bands.map((b) => b.y1 - b.y0), 0.5);
-  bands = bands.filter((b) => b.y1 - b.y0 <= medH * 4);
+  // A band far taller than the rest is usually two text lines joined by
+  // texture: split it at its emptiest rows, and drop what stays too tall.
+  const split = [];
+  for (const b of bands) {
+    if (b.y1 - b.y0 <= medH * 2.5) { split.push(b); continue; }
+    let peak = 0;
+    for (let y = b.y0; y < b.y1; y++) peak = Math.max(peak, rowInk[y]);
+    const low = Math.max(2, peak * 0.06);
+    let s = b.y0;
+    for (let y = b.y0; y <= b.y1; y++) {
+      if (y === b.y1 || rowInk[y] <= low) {
+        if (y - s >= 6) split.push({ y0: s, y1: y });
+        s = y + 1;
+      }
+    }
+  }
+  bands = split.filter((b) => b.y1 - b.y0 >= 6 && b.y1 - b.y0 <= medH * 4);
 
+  let id = 0;
   for (const b of bands) {
     const bh = b.y1 - b.y0;
     const colInk = new Uint32Array(W);
@@ -123,7 +186,8 @@ export function findBlobs(img, { crop = null } = {}) {
         for (let x = r.x0; x < Math.min(r.x1, cx1); x++) if (ink[o + x]) { n++; if (y < y0) y0 = y; if (y >= y1) y1 = y + 1; }
       }
       if (n < 4 || r.x1 - r.x0 < 2 || y1 - y0 < 3) continue;
-      b.blobs.push({ x0: r.x0, x1: Math.min(W, r.x1), y0, y1 });
+      const x1 = Math.min(W, r.x1);
+      b.blobs.push({ id: id++, x0: r.x0, x1, y0, y1, narrow: x1 - r.x0 <= (y1 - y0) * 0.95 });
     }
   }
   return bands.filter((b) => b.blobs.length);
@@ -207,42 +271,42 @@ export function trimLastGlyph(img, bl) {
 }
 
 /**
- * Pack every band's cells into one tight, dark-on-white text line.
- * perBlob scales each cell to the same ink height (so a small agent label and a
- * big IGN read as one even line); otherwise one scale brings the median band
- * to ~targetH. trim: draw each cell without its last glyph where trimLastGlyph
- * allows (placements get .cut) - the engine reads "%" badly, and a percent
- * column can be read from that copy instead. Returns the composite plus the
- * placements that map words back.
+ * Lay out lines of cells, each normalised to dark-on-white, and render them.
+ * lines: [[{ blob, band, cut?, anchor?, triple?, gapAfter? }]]. perBlob scales
+ * every cell to the same ink height; otherwise `S` scales the band.
+ * Returns { width, height, luma, placements } - a placement maps a word back.
  */
-export function buildComposite(img, bands, { targetH = 52, gapEm = 0.9, perBlob = true, trim = false } = {}) {
-  const medH = percentile(bands.map((b) => b.y1 - b.y0), 0.5) || 16;
-  const S = Math.min(4, Math.max(1, targetH / medH));
+function renderLines(img, lines, { targetH, gapEm = 0.9, perBlob = true, S = 1, bandOf }) {
   const margin = 24;
-  const lines = [];
+  const laid = [];
   let width = 0;
   let cy = margin;
-  for (let bi = 0; bi < bands.length; bi++) {
-    const b = bands[bi];
-    const bh = b.y1 - b.y0;
+  for (const items of lines) {
     let cx = margin;
     const places = [];
     let lineH = 0;
-    for (const bl of b.blobs) {
+    for (const it of items) {
+      const bl = it.blob;
+      const b = bandOf(it.band);
+      const bh = b.y1 - b.y0;
       const ih = Math.max(4, bl.y1 - bl.y0);
       const s = perBlob ? Math.min(6, Math.max(0.5, (targetH * 0.7) / ih)) : S;
       const bp = Math.max(2, Math.round((perBlob ? ih : bh) * (perBlob ? 0.3 : 0.25)));
-      const cutAt = trim ? trimLastGlyph(img, bl) : null;
+      const cutAt = it.cut == null ? null : it.cut;
       const sx0 = bl.x0 - bp, sx1 = (cutAt === null ? bl.x1 : cutAt) + bp;
       const sy0 = (perBlob ? bl.y0 : b.y0) - bp, sy1 = (perBlob ? bl.y1 : b.y1) + bp;
-      const p = { band: bi, blob: bl, cut: cutAt !== null, clipX: cutAt === null ? Infinity : cutAt, s, sx0, sy0, sx1, sy1, cx0: cx, cy0: cy, cw: Math.round((sx1 - sx0) * s), ch: Math.round((sy1 - sy0) * s) };
+      const p = {
+        blobId: bl.id, band: it.band, cut: cutAt !== null, anchor: !!it.anchor, triple: it.triple ?? -1,
+        clipX: cutAt === null ? Infinity : cutAt, s, sx0, sy0, sx1, sy1, cx0: cx, cy0: cy,
+        cw: Math.round((sx1 - sx0) * s), ch: Math.round((sy1 - sy0) * s),
+      };
       places.push(p);
-      cx += p.cw + Math.round(Math.max(6, (perBlob ? ih : bh) * gapEm) * s);
+      cx += p.cw + Math.round(Math.max(6, (perBlob ? ih : bh) * gapEm * (it.gapAfter || 1)) * s);
       lineH = Math.max(lineH, p.ch);
     }
     for (const p of places) p.cy0 = cy + Math.round((lineH - p.ch) / 2);
     width = Math.max(width, cx + margin);
-    lines.push(places);
+    laid.push(places);
     cy += lineH + Math.round(targetH * 0.8);
   }
   let height = cy + margin;
@@ -250,14 +314,14 @@ export function buildComposite(img, bands, { targetH = 52, gapEm = 0.9, perBlob 
   if (width > MAX || height > MAX) {
     const k = Math.min(MAX / width, MAX / height);
     width = Math.ceil(width * k); height = Math.ceil(height * k);
-    for (const places of lines) for (const p of places) {
+    for (const places of laid) for (const p of places) {
       p.s *= k; p.cx0 = Math.round(p.cx0 * k); p.cy0 = Math.round(p.cy0 * k); p.cw = Math.round(p.cw * k); p.ch = Math.round(p.ch * k);
     }
   }
 
   const out = new Uint8Array(width * height).fill(255);
   const placements = [];
-  for (const places of lines) {
+  for (const places of laid) {
     for (const p of places) {
       const level = cellLevels(img, p.sx0, p.sy0, p.sx1, p.sy1);
       for (let y = 0; y < p.ch; y++) {
@@ -273,10 +337,88 @@ export function buildComposite(img, bands, { targetH = 52, gapEm = 0.9, perBlob 
           out[oy * width + ox] = t <= 0.15 ? 255 : t >= 0.85 ? 0 : Math.round(255 * (1 - (t - 0.15) / 0.7));
         }
       }
+      delete p.clipX;
       placements.push(p);
     }
   }
   return { width, height, luma: out, placements };
+}
+
+/**
+ * Pack every band's cells into one tight, dark-on-white text line.
+ * trim: draw each cell without its last glyph where trimLastGlyph allows
+ * (placements get .cut) - the engine reads "%" badly, and a percent column
+ * can be read from that copy instead.
+ */
+export function buildComposite(img, bands, { targetH = 52, gapEm = 0.9, perBlob = true, trim = false } = {}) {
+  const medH = percentile(bands.map((b) => b.y1 - b.y0), 0.5) || 16;
+  const S = Math.min(4, Math.max(1, targetH / medH));
+  const lines = bands.map((b, bi) => b.blobs.map((bl) => ({ blob: bl, band: bi, cut: trim ? trimLastGlyph(img, bl) : null })));
+  return renderLines(img, lines, { targetH, gapEm, perBlob, S, bandOf: (i) => bands[i] });
+}
+
+/**
+ * Probe layout for single-glyph cells (and, with wide, two-glyph ones) - the
+ * ones the engine drops or misreads when they stand alone. Each is drawn between two copies of a multi-digit neighbour
+ * from its own row ("298 4 298"), three such triples to a line. A probe read
+ * only counts when both copies of its neighbour read the same.
+ * Returns null when there is nothing to probe.
+ */
+export function buildProbe(img, bands, { targetH = 48, wide = false } = {}) {
+  const triples = [];
+  bands.forEach((b, bi) => {
+    const h = (bl) => Math.max(4, bl.y1 - bl.y0);
+    const anchors = b.blobs.filter((bl) => !bl.narrow && bl.x1 - bl.x0 >= h(bl) * 1.2 && bl.x1 - bl.x0 <= h(bl) * 3.2);
+    for (const bl of b.blobs) {
+      const short = bl.narrow || (wide && bl.x1 - bl.x0 <= h(bl) * 1.7);
+      const others = anchors.filter((x) => x !== bl);
+      if (!short || !others.length) continue;
+      const cx = (bl.x0 + bl.x1) / 2;
+      const a = others.reduce((p, q) => (Math.abs((q.x0 + q.x1) / 2 - cx) < Math.abs((p.x0 + p.x1) / 2 - cx) ? q : p));
+      triples.push({ bi, cell: bl, anchor: a });
+    }
+  });
+  if (!triples.length) return null;
+  const lines = [];
+  for (let i = 0; i < triples.length; i += 3) {
+    const line = [];
+    triples.slice(i, i + 3).forEach((t, k) => {
+      const n = i + k;
+      line.push({ blob: t.anchor, band: t.bi, anchor: true, triple: n });
+      line.push({ blob: t.cell, band: t.bi, triple: n });
+      line.push({ blob: t.anchor, band: t.bi, anchor: true, triple: n, gapAfter: 3 });
+    });
+    lines.push(line);
+  }
+  return renderLines(img, lines, { targetH, perBlob: true, bandOf: (j) => bands[j] });
+}
+
+/**
+ * Worker-side half of ocrImage: decode, find the cells, build every layout and
+ * write each as a temp image. Pure CPU + file writes; returns plain data.
+ */
+export function prepareImages(buf, { crop = null, variants = DEFAULT_VARIANTS, tmpBase, keepDir = '' } = {}) {
+  let img;
+  try { img = decodeImage(buf); } catch (e) { return { ok: false, status: 415, reason: e.message }; }
+  const bands = findBlobs(img, { crop });
+  if (!bands.length) return { ok: false, status: 422, reason: 'no text found in the image' };
+  const plans = [];
+  variants.forEach((v, i) => {
+    if (v.raw) {
+      const file = `${tmpBase}-${i}${isJpeg(buf) ? '.jpg' : '.png'}`;
+      fs.writeFileSync(file, buf);
+      plans.push({ file, raw: true });
+      return;
+    }
+    const comp = v.probe ? buildProbe(img, bands, v) : buildComposite(img, bands, v);
+    if (!comp) return;
+    const png = encodeGray(comp.width, comp.height, comp.luma);
+    const file = `${tmpBase}-${i}.png`;
+    fs.writeFileSync(file, png);
+    if (keepDir) fs.writeFileSync(path.join(keepDir, `layout-${i}${v.probe ? '-probe' : v.trim ? '-trim' : ''}.png`), png);
+    plans.push({ file, trim: !!v.trim, probe: !!v.probe, placements: comp.placements });
+  });
+  return { ok: true, width: img.width, height: img.height, bands, plans };
 }
 
 /** Which composite placement a word belongs to; null if none or if it straddles two cells. */
@@ -308,9 +450,10 @@ function blobOf(word, bands) {
 // ------------------------------------------------------------ the engine ---
 
 /**
- * Run ocr-windows.ps1 on one or more PNG files in a single PowerShell start-up.
- * Always async (never spawnSync - it would stall the agent's event loop for the
- * whole OCR). Resolves the script's JSON: { ok, lang, results:[{ok,w,h,lines}] }.
+ * Run ocr-windows.ps1 on one or more image files in a single PowerShell
+ * start-up. Always async (never spawnSync - it would stall the agent's event
+ * loop for the whole OCR). Resolves the script's JSON:
+ * { ok, lang, results:[{ok,w,h,lines}] } or { ok:false, status, reason }.
  */
 export function runWindowsOcr(files, { timeoutMs = 15000, lang = '', listLanguages = false } = {}) {
   return new Promise((resolve) => {
@@ -340,86 +483,105 @@ export function runWindowsOcr(files, { timeoutMs = 15000, lang = '', listLanguag
       const text = Buffer.concat(out).toString('utf8').replace(/^\uFEFF/, '').trim();
       const line = text.split(/\r?\n/).reverse().find((l) => l.startsWith('{'));
       if (!line) return finish({ ok: false, reason: `OCR returned nothing${err.length ? `: ${Buffer.concat(err).toString('utf8').trim().slice(0, 300)}` : ''}` });
-      try { finish(JSON.parse(line)); } catch { finish({ ok: false, reason: 'OCR returned unreadable output' }); }
+      const tj = Date.now();
+      try { const j = JSON.parse(line); j.parseMs = Date.now() - tj; finish(j); } catch { finish({ ok: false, reason: 'OCR returned unreadable output' }); }
     });
   });
 }
 
-/** Decide one cell from its reads in the different layouts. */
-function vote(reads) {
+/**
+ * Decide one cell from its reads in the different layouts. minVotes: a
+ * single-glyph cell needs two agreeing reads - one read of a lone "1" is not
+ * enough to put on air.
+ */
+function vote(reads, minVotes = 1) {
   const nums = reads.map(normalizeNumber);
   if (nums.every((n) => n !== null)) {
     const tally = new Map();
     for (const n of nums) tally.set(n, (tally.get(n) || 0) + 1);
     const ranked = [...tally.entries()].sort((a, b) => b[1] - a[1]);
-    if (ranked.length === 1 || ranked[0][1] > ranked[1][1]) {
+    if ((ranked.length === 1 || ranked[0][1] > ranked[1][1]) && ranked[0][1] >= minVotes) {
       const pick = ranked[0][0];
       return { text: reads[nums.indexOf(pick)], votes: ranked[0][1], of: reads.length };
     }
     return { text: '?', votes: 0, of: reads.length, alts: ranked.map((r) => r[0]) };
   }
-  // Text (or mixed): the most common exact read, first layout on a tie.
+  // Text (or mixed): the most common exact read, first layout on a tie. The
+  // other reads ride along (a header label one layout got whole).
   const tally = new Map();
   for (const r of reads) tally.set(r, (tally.get(r) || 0) + 1);
   let best = reads[0];
   for (const r of reads) if (tally.get(r) > tally.get(best)) best = r;
-  return { text: best, votes: tally.get(best), of: reads.length };
+  const out = { text: best, votes: tally.get(best), of: reads.length };
+  if (tally.size > 1) out.reads = [...tally.keys()];
+  return out;
 }
 
 /**
- * OCR a PNG buffer.
- * @param {Buffer} png
+ * OCR a PNG or JPEG buffer.
+ * @param {Buffer} image
  * @param {object} [opts]
  * @param {number} [opts.timeoutMs=15000]
  * @param {string} [opts.lang]        OCR language tag; English when unset
  * @param {{x:number,y:number,w:number,h:number}} [opts.crop]  only look inside this rectangle
  * @param {object[]} [opts.variants]  layouts to read (DEFAULT_VARIANTS)
- * @param {string} [opts.keepDir]     diagnostics: keep the composites in this folder
- * @returns {Promise<{ok:true, text:string, lines:{text:string, words:{text:string,x:number,y:number,w:number,h:number,votes:number,of:number,alts?:string[],cut?:string}[]}[], engine:'windows', lang:string, ms:number, width:number, height:number, layouts:number}
- *                  | {ok:false, status:number, reason:string, ms:number}>}  status: 415 not a PNG, 422 nothing readable, 501 cannot OCR on this machine, 504 timed out
+ * @param {string} [opts.keepDir]     diagnostics: keep the layouts in this folder
+ * @param {boolean} [opts.inline]     run on this thread instead of a worker (diagnostics)
+ * @returns {Promise<{ok:true, text:string, lines:{text:string, words:{text:string,x:number,y:number,w:number,h:number,votes:number,of:number,alts?:string[],reads?:string[],cut?:string}[]}[], engine:'windows', lang:string, ms:number, width:number, height:number, layouts:number, timing:{prep:number,ocr:number,parse:number,map:number}}
+ *                  | {ok:false, status:number, reason:string, ms:number}>}  status: 415 not a PNG/JPEG, 422 nothing readable, 501 cannot OCR on this machine, 504 timed out
  *   Word boxes are the source cell's box in the original image. votes/of: how
- *   many layouts agreed. alts: a number the layouts disagreed on (text is "?").
+ *   many layouts agreed. alts: what the layouts read when they did not agree,
+ *   or a single-glyph cell read only once (text is then "?").
+ *   reads: every distinct text read of a non-numeric cell (header labels).
  *   cut: the cell read without its last glyph (used for percent columns only).
+ *   timing: ms spent preparing the layouts, in the OCR engine, parsing its
+ *   output and voting - all inside the worker.
  */
-export async function ocrImage(png, { timeoutMs = 15000, lang = '', crop = null, variants = DEFAULT_VARIANTS, keepDir = '' } = {}) {
+export async function ocrImage(image, opts = {}) {
+  const t0 = Date.now();
+  if (process.platform !== 'win32') return { ok: false, status: 501, reason: NOT_WINDOWS, ms: 0 };
+  if (!isPng(image) && !isJpeg(image)) return { ok: false, status: 415, reason: 'send a PNG or JPEG image', ms: 0 };
+  if (opts.inline) return ocrInline(image, opts);
+  const timeoutMs = opts.timeoutMs || 15000;
+  return new Promise((resolve) => {
+    let w;
+    try {
+      // execArgv cleared: the agent may run under flags a worker refuses (--watch, --input-type ...).
+      w = new Worker(WORKER, { workerData: { image, opts: { ...opts, inline: true } }, execArgv: [] });
+    } catch {
+      return resolve(ocrInline(image, opts).catch((e) => ({ ok: false, status: 500, reason: `OCR failed: ${e.message}`, ms: Date.now() - t0 }))); // no worker: do it here, slower for the event loop
+    }
+    let done = false;
+    const settle = (v) => { if (!done) { done = true; clearTimeout(guard); resolve(v); } };
+    const guard = setTimeout(() => { settle({ ok: false, status: 504, reason: `OCR timed out after ${timeoutMs} ms`, ms: Date.now() - t0 }); w.terminate(); }, timeoutMs + 10000);
+    w.once('message', (m) => { settle(m); w.terminate(); });
+    w.once('error', () => { if (!done) ocrInline(image, opts).then(settle, (e) => settle({ ok: false, status: 500, reason: `OCR failed: ${e.message}`, ms: Date.now() - t0 })); });
+    w.once('exit', () => settle({ ok: false, status: 500, reason: 'OCR stopped unexpectedly', ms: Date.now() - t0 }));
+  });
+}
+
+/** ocrImage on the calling thread: the worker runs this. */
+export async function ocrInline(image, { timeoutMs = 15000, lang = '', crop = null, variants = DEFAULT_VARIANTS, keepDir = '' } = {}) {
   const t0 = Date.now();
   const fail = (reason, status = 422) => ({ ok: false, status, reason, ms: Date.now() - t0 });
   if (process.platform !== 'win32') return fail(NOT_WINDOWS, 501);
-  if (!isPng(png)) return fail('send a PNG image', 415);
+  if (!isPng(image) && !isJpeg(image)) return fail('send a PNG or JPEG image', 415);
 
-  let img;
-  try { img = decodeLuma(png); } catch (e) { return fail(e.message, 415); }
-  const bands = findBlobs(img, { crop });
-  if (!bands.length) return fail('no text found in the image');
-
-  const tag = `cta-ocr-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
-  const files = [];
-  const plans = [];
+  const tmpBase = path.join(os.tmpdir(), `cta-ocr-${process.pid}-${crypto.randomBytes(6).toString('hex')}`);
+  const opts = { crop, variants, tmpBase, keepDir };
+  let prep;
   let res;
+  let tPrep = 0;
   try {
-    for (let i = 0; i < variants.length; i++) {
-      const v = variants[i];
-      const file = path.join(os.tmpdir(), `${tag}-${i}.png`);
-      files.push(file);
-      if (v.raw) {
-        fs.writeFileSync(file, png);
-        plans.push({ raw: true });
-      } else {
-        // ~50-100 ms of pixel work per layout at 1080p: yield between them so
-        // the agent's HTTP / WebSocket traffic is not held up for the lot.
-        await new Promise((r) => setImmediate(r));
-        const comp = buildComposite(img, bands, v);
-        const buf = encodeGray(comp.width, comp.height, comp.luma);
-        fs.writeFileSync(file, buf);
-        if (keepDir) fs.writeFileSync(path.join(keepDir, `composite-${i}.png`), buf);
-        plans.push({ placements: comp.placements, trim: !!v.trim });
-      }
-    }
-    res = await runWindowsOcr(files, { timeoutMs, lang });
-  } catch (e) {
-    res = { ok: false, reason: `OCR failed: ${e.message}` };
+    prep = prepareImages(image, opts);
+    if (!prep || !prep.ok) return fail((prep && prep.reason) || 'OCR prep failed', (prep && prep.status) || 500);
+    tPrep = Date.now() - t0;
+    res = await runWindowsOcr(prep.plans.map((p) => p.file), { timeoutMs, lang });
   } finally {
-    for (const f of files) fs.rm(f, { force: true }, () => {});
+    // Synchronous on purpose: this runs in the worker, which is terminated as
+    // soon as it answers. Sweep by prefix - prep may have failed half way.
+    const dir = path.dirname(tmpBase), base = path.basename(tmpBase);
+    try { for (const n of fs.readdirSync(dir)) if (n.startsWith(base)) fs.rmSync(path.join(dir, n), { force: true }); } catch { /* temp dir gone: nothing to clean */ }
   }
   if (!res || !res.ok) {
     const reason = (res && res.reason) || 'OCR failed';
@@ -427,32 +589,49 @@ export async function ocrImage(png, { timeoutMs = 15000, lang = '', crop = null,
     return fail(reason, (res && res.status) || (/not available|no Windows OCR language/i.test(reason) ? 501 : 500));
   }
 
-  // Every layout's words, per source cell. Trimmed-layout reads are kept apart.
-  const reads = new Map(); // blob -> string[] (one per layout that read it)
-  const cuts = new Map();  // blob -> string[] (reads without the last glyph)
+  const tMap = Date.now();
+  const { bands } = prep;
+  const blobById = new Map();
+  for (const b of bands) for (const bl of b.blobs) blobById.set(bl.id, bl);
+
+  // Every layout's words, per source cell. Trimmed and probe reads kept apart.
+  const reads = new Map(); // blobId -> string[] (one per layout that read it)
+  const cuts = new Map();  // blobId -> string[] (reads without the last glyph)
+  const add = (map, id, text) => { if (!map.has(id)) map.set(id, []); map.get(id).push(text); };
   (res.results || []).forEach((r, i) => {
-    const plan = plans[i];
+    const plan = prep.plans[i];
     if (!r || !r.ok || !plan) return;
-    const perBlob = new Map();
+    const perBlob = new Map(); // blobId -> words (non-anchor)
+    const anchors = new Map(); // triple -> anchor texts
+    const probes = new Map();  // triple -> { id, words }
     for (const l of r.lines || []) {
       for (const w of l.words || []) {
-        let bl = null;
-        if (plan.raw) bl = blobOf(w, bands);
-        else {
-          const p = placementOf(w, plan.placements);
-          if (p && (!plan.trim || p.cut)) bl = p.blob;
+        if (plan.raw) {
+          const bl = blobOf(w, bands);
+          if (bl) { if (!perBlob.has(bl.id)) perBlob.set(bl.id, []); perBlob.get(bl.id).push(w); }
+          continue;
         }
-        if (!bl) continue;
-        if (!perBlob.has(bl)) perBlob.set(bl, []);
-        perBlob.get(bl).push(w);
+        const p = placementOf(w, plan.placements);
+        if (!p) continue;
+        if (plan.probe) {
+          if (p.anchor) { if (!anchors.has(p.triple)) anchors.set(p.triple, []); anchors.get(p.triple).push(w.text); }
+          else { if (!probes.has(p.triple)) probes.set(p.triple, { id: p.blobId, words: [] }); probes.get(p.triple).words.push(w); }
+          continue;
+        }
+        if (plan.trim && !p.cut) continue;
+        if (!perBlob.has(p.blobId)) perBlob.set(p.blobId, []);
+        perBlob.get(p.blobId).push(w);
       }
     }
-    const into = plan.trim ? cuts : reads;
-    for (const [bl, ws] of perBlob) {
-      const text = ws.sort((a, b) => a.x - b.x).map((w) => w.text).join(' ');
-      if (!into.has(bl)) into.set(bl, []);
-      into.get(bl).push(text);
+    const textOf = (ws) => ws.sort((a, b) => a.x - b.x).map((w) => w.text).join(' ');
+    if (plan.probe) {
+      for (const [triple, pr] of probes) {
+        const an = anchors.get(triple) || [];
+        if (an.length === 2 && normalizeNumber(an[0]) !== null && normalizeNumber(an[0]) === normalizeNumber(an[1])) add(reads, pr.id, textOf(pr.words));
+      }
+      return;
     }
+    for (const [id, ws] of perBlob) add(plan.trim ? cuts : reads, id, textOf(ws));
   });
   if (!reads.size && !cuts.size) return fail('the OCR engine read no text in the image');
 
@@ -460,16 +639,16 @@ export async function ocrImage(png, { timeoutMs = 15000, lang = '', crop = null,
   for (const b of bands) {
     const words = [];
     for (const bl of b.blobs) {
-      const rs = reads.get(bl), cs = cuts.get(bl);
+      const rs = reads.get(bl.id), cs = cuts.get(bl.id);
       if (!rs && !cs) continue;
-      const word = rs ? vote(rs) : { text: '', votes: 0, of: 0 };
+      const word = rs ? vote(rs, bl.narrow ? 2 : 1) : { text: '', votes: 0, of: 0 };
       if (cs) word.cut = vote(cs).text;
       words.push({ ...word, x: bl.x0, y: bl.y0, w: bl.x1 - bl.x0, h: bl.y1 - bl.y0 });
     }
     if (words.length) lines.push({ text: words.map((w) => w.text).filter(Boolean).join(' '), words });
   }
   const layouts = (res.results || []).filter((r) => r && r.ok).length;
-  return { ok: true, text: lines.map((l) => l.text).join('\n'), lines, engine: 'windows', lang: res.lang || '', ms: Date.now() - t0, width: img.width, height: img.height, layouts };
+  return { ok: true, text: lines.map((l) => l.text).join('\n'), lines, engine: 'windows', lang: res.lang || '', ms: Date.now() - t0, width: prep.width, height: prep.height, layouts, timing: { prep: tPrep, ocr: tMap - t0 - tPrep, parse: res.parseMs || 0, map: Date.now() - tMap } };
 }
 
 /** Installed Windows OCR languages ({ ok, languages }) - for a diagnostics view. */
@@ -481,10 +660,10 @@ export function ocrLanguages({ timeoutMs = 10000 } = {}) {
 
 /** Header label -> column key: pack keys (acs, k, d, a, kast, hs, adr ...) plus the extras a board shows. */
 const HEADER_KEYS = {
-  ACS: 'acs', AVGCOMBATSCORE: 'acs', SCORE: 'score',
+  ACS: 'acs', AVGCOMBATSCORE: 'acs', COMBATSCORE: 'acs', SCORE: 'score',
   K: 'k', KILLS: 'k', D: 'd', DEATHS: 'd', A: 'a', ASSISTS: 'a',
   KAST: 'kast', 'KAST%': 'kast', HS: 'hs', 'HS%': 'hs', HEADSHOT: 'hs', 'HEADSHOT%': 'hs',
-  ADR: 'adr', ECON: 'econ', ECONRATING: 'econ', FB: 'fb', FK: 'fb', FIRSTBLOODS: 'fb', FD: 'fd',
+  ADR: 'adr', ECON: 'econ', ECONRATING: 'econ', FB: 'fb', FK: 'fb', FIRSTBLOODS: 'fb', FIRSTKILLS: 'fb', FD: 'fd',
   PLANTS: 'plants', DEFUSES: 'defuses', KD: 'kd', 'K/D': 'kd', '+/-': 'pm',
   AGENT: '_agent', PLAYER: '_name', NAME: '_name',
 };
@@ -497,12 +676,72 @@ function headerKey(text) {
   return HEADER_KEYS[t] || HEADER_KEYS[t.replace(/[^A-Z%+/-]/g, '')] || null;
 }
 
-/** A header word's column key; "HS%" whose full read was lost can come back from its cut read "HS". */
+/**
+ * A header word's column key: its read, else any other layout's read of it
+ * ("RATING" x3, "ECON RATING" x1), else - percent labels only - its cut read
+ * ("HS%" whose full read was lost comes back as "HS").
+ */
 function wordKey(w) {
   const k = w.text ? headerKey(w.text) : null;
   if (k) return k;
+  for (const r of w.reads || []) { const kr = headerKey(r); if (kr) return kr; }
   const c = w.cut ? headerKey(`${w.cut}%`) : null;
   return c && PERCENT_KEYS.has(c) ? c : null;
+}
+
+/**
+ * Board layouts we know, left to right. Used only to NAME a column whose header
+ * label did not read - never to move or invent a value - and only when exactly
+ * one layout fits the labels that did read (see inferColumns).
+ */
+export const KNOWN_LAYOUTS = [
+  ['acs', 'k', 'd', 'a', 'econ', 'fb', 'plants', 'defuses'], // VALORANT end-of-match scoreboard (assumed - docs/OCR-PLAN.md)
+  ['acs', 'k', 'd', 'a', 'econ', 'fb', 'kast', 'hs'],         // tracker-style board
+];
+
+/**
+ * Name the columns whose header label was not read, from a known layout.
+ * hcols: read labels {key, cx}; dataX: x-centres of the number cells under the
+ * header (one entry per cell). A missing key is added only if every read label
+ * belongs to the layout in the same left-to-right order (at least 4 of them),
+ * a column of numbers (in half the rows or more) sits where the layout puts
+ * it, and no other fitting layout would name that column differently.
+ * @returns {{key:string, cx:number, inferred:true}[]}
+ */
+export function inferColumns(hcols, dataX, rowCount, spacing) {
+  if (hcols.length < 4 || !dataX.length) return [];
+  const xs = [...dataX].sort((a, b) => a - b);
+  const clusters = [];
+  for (const x of xs) {
+    const c = clusters[clusters.length - 1];
+    if (c && x - c.xs[c.xs.length - 1] < spacing * 0.3) c.xs.push(x); else clusters.push({ xs: [x] });
+  }
+  const cols = clusters.filter((c) => c.xs.length >= Math.max(3, rowCount * 0.5)).map((c) => percentile(c.xs, 0.5))
+    .filter((x) => hcols.every((h) => Math.abs(h.cx - x) > spacing * 0.6));
+  if (!cols.length) return [];
+  const proposals = []; // per fitting layout: Map(colX -> key)
+  for (const T of KNOWN_LAYOUTS) {
+    const idx = hcols.map((h) => T.indexOf(h.key));
+    if (idx.some((i) => i < 0) || idx.some((i, j) => j && i <= idx[j - 1])) continue;
+    const pitch = percentile(idx.slice(1).map((i, j) => (hcols[j + 1].cx - hcols[j].cx) / (i - idx[j])), 0.5);
+    const named = new Map();
+    T.forEach((key, ti) => {
+      if (hcols.some((h) => h.key === key)) return;
+      let L = -1, R = -1;
+      idx.forEach((i, j) => { if (i < ti) L = j; if (i > ti && R < 0) R = j; });
+      const want = L >= 0 && R >= 0 ? hcols[L].cx + ((hcols[R].cx - hcols[L].cx) * (ti - idx[L])) / (idx[R] - idx[L])
+        : L >= 0 ? hcols[L].cx + pitch * (ti - idx[L]) : hcols[R].cx - pitch * (idx[R] - ti);
+      const hit = cols.find((x) => Math.abs(x - want) < pitch * 0.35);
+      if (hit !== undefined) named.set(hit, key);
+    });
+    proposals.push(named);
+  }
+  const out = [];
+  for (const x of cols) {
+    const keys = new Set(proposals.map((p) => p.get(x)));
+    if (keys.size === 1 && !keys.has(undefined)) out.push({ key: [...keys][0], cx: x, inferred: true });
+  }
+  return out;
 }
 
 /** A stat cell's value from its word, or null. Percent columns must be 0-100 and may use the cut read. */
@@ -556,6 +795,33 @@ export function snapIgn(ign, roster) {
 }
 
 /**
+ * The IGN from the words left of the stat columns. Icons (agent, rank) come
+ * back as stray one- or two-character "words" around the name ("I Ember A"):
+ * the longest run of words that matches the roster wins; failing that, short
+ * tokens at either end are dropped. { ign, snapped, dropped }
+ */
+export function pickIgn(parts, roster) {
+  const toks = parts.map((p) => String(p).trim()).filter(Boolean);
+  if (!toks.length) return { ign: '', snapped: false, dropped: [] };
+  if (roster && roster.length) {
+    // Exact (case/punctuation-insensitive) matches first, then one-character-off ones.
+    for (const fuzzy of [false, true]) {
+      for (let len = toks.length; len >= 1; len--) {
+        for (let i = 0; i + len <= toks.length; i++) {
+          const s = snapIgn(toks.slice(i, i + len).join(' '), roster);
+          if (roster.includes(s.ign) && s.snapped === fuzzy) return { ign: s.ign, snapped: s.snapped, dropped: [...toks.slice(0, i), ...toks.slice(i + len)] };
+        }
+      }
+    }
+  }
+  let i = 0, j = toks.length;
+  const junk = (t) => t.length <= 2;
+  while (i < j - 1 && junk(toks[i])) i++;
+  while (j - 1 > i && junk(toks[j - 1])) j--;
+  return { ign: toks.slice(i, j).join(' '), snapped: false, dropped: [...toks.slice(0, i), ...toks.slice(j)] };
+}
+
+/**
  * Rebuild the scoreboard from OCR lines (word boxes in source pixels).
  * Returns the structured read for the operator's preview plus `text` in the
  * format scoreboard.js parses: "IGN  AGENT  v1  v2 ..." in pack column order.
@@ -579,11 +845,26 @@ export function readScoreboard(lines, { columns = ['k', 'd', 'a'], roster = [] }
     return { words, cy: ys.length ? ys[ys.length >> 1] : 0 };
   }).filter((l) => l.words.length).sort((a, b) => a.cy - b.cy);
 
+  // Header labels, joining two neighbouring words when only the pair is a
+  // label ("FIRST" + "BLOODS").
+  const headerCols = (l) => {
+    const out = [];
+    const ws = [...l.words].sort((a, b) => a.x - b.x);
+    for (let i = 0; i < ws.length; i++) {
+      const k = wordKey(ws[i]);
+      if (k) { out.push({ key: k, cx: ws[i].x + ws[i].w / 2, x: ws[i].x }); continue; }
+      const n = ws[i + 1];
+      const k2 = n && !wordKey(n) && ws[i].text && n.text ? headerKey(`${ws[i].text}${n.text}`) : null;
+      if (k2) { out.push({ key: k2, cx: (ws[i].x + n.x + n.w) / 2, x: ws[i].x }); i++; }
+    }
+    return out;
+  };
+
   // Header: the line with the most recognised labels (at least 3).
-  let header = null, best = 2;
+  let header = null, hdr = [], best = 2;
   for (const l of L) {
-    const hits = l.words.filter((w) => wordKey(w)).length;
-    if (hits > best) { best = hits; header = l; }
+    const hc = headerCols(l);
+    if (hc.length > best) { best = hc.length; header = l; hdr = hc; }
   }
 
   const out = [];
@@ -604,14 +885,24 @@ export function readScoreboard(lines, { columns = ['k', 'd', 'a'], roster = [] }
 
   const hcols = [];
   let nameX = null;
-  for (const w of header.words) {
-    const k = wordKey(w);
-    const cx = w.x + w.w / 2;
-    if (k === '_name') nameX = w.x;
-    else if (k && k !== '_agent' && !hcols.some((c) => c.key === k)) hcols.push({ key: k, cx });
+  for (const h of hdr) {
+    if (h.key === '_name') nameX = h.x;
+    else if (h.key !== '_agent' && !hcols.some((c) => c.key === h.key)) hcols.push({ key: h.key, cx: h.cx });
   }
   hcols.sort((a, b) => a.cx - b.cx);
   const spacing = hcols.length > 1 ? Math.min(...hcols.slice(1).map((c, i) => c.cx - hcols[i].cx)) : 200;
+  // A column of numbers under a header label that did not read: name it from a known layout.
+  {
+    const below = L.filter((l) => l !== header && l.cy > header.cy);
+    const numeric = (w) => normalizeNumber(w.text) !== null || !!w.alts || !!w.cut;
+    const dataRows = below.filter((l) => l.words.filter(numeric).length >= 3);
+    const dataX = dataRows.flatMap((l) => l.words.filter(numeric).map((w) => w.x + w.w / 2));
+    for (const c of inferColumns(hcols, dataX, dataRows.length, spacing)) {
+      hcols.push(c);
+      warnings.push(`the ${c.key} column header did not read - its column was named from the usual board layout, check it`);
+    }
+    hcols.sort((a, b) => a.cx - b.cx);
+  }
   const firstStat = hcols.length ? hcols[0].cx - spacing * 0.6 : Infinity;
   const missing = cols.filter((c) => !hcols.some((h) => h.key === c));
   if (missing.length) warnings.push(`no ${missing.join(', ')} column was read on the board - left empty`);
@@ -624,9 +915,8 @@ export function readScoreboard(lines, { columns = ['k', 'd', 'a'], roster = [] }
     const nameParts = [];
     for (const w of left) {
       if (!agent && isAgent(w.text) && (nameX === null || w.x < nameX - 2)) agent = String(w.text).toUpperCase();
-      else nameParts.push(w.text);
+      else if (w.text !== '?') nameParts.push(w.text);
     }
-    let ign = nameParts.join(' ').trim();
     const inCell = {};
     for (const w of stat) {
       const cx = w.x + w.w / 2;
@@ -646,15 +936,15 @@ export function readScoreboard(lines, { columns = ['k', 'd', 'a'], roster = [] }
       cells[c.key] = v;
       if (v !== null) readable++;
     }
+    const picked = pickIgn(nameParts, roster);
+    let ign = picked.ign;
     if (!ign || !/[A-Za-z]/.test(ign) || readable < Math.max(2, Math.ceil(hcols.length / 2))) {
       // Not a player row. Keep digit-free text lines (a team name above its rows).
       const t = l.words.map((w) => w.text).filter(Boolean).join(' ');
       if (t && !stat.length && !/\d/.test(t)) out.push(t);
       continue;
     }
-    const snap = snapIgn(ign, roster);
-    if (snap.snapped) warnings.push(`read "${ign}", matched to roster name "${snap.ign}"`);
-    ign = snap.ign;
+    if (picked.snapped) warnings.push(`read "${nameParts.join(' ')}", matched to roster name "${ign}"`);
     const vals = [];
     for (const c of cols) {
       if (cells[c] === undefined || cells[c] === null) break;
@@ -662,7 +952,10 @@ export function readScoreboard(lines, { columns = ['k', 'd', 'a'], roster = [] }
     }
     const holes = cols.filter((c) => hcols.some((h) => h.key === c) && cells[c] === null);
     for (const c of holes) {
-      warnings.push(alts[c] ? `${ign}: ${c} read as ${alts[c].join(' or ')} - check it` : `${ign}: could not read ${c}`);
+      const a = alts[c];
+      warnings.push(!a ? `${ign}: could not read ${c}`
+        : a.length === 1 ? `${ign}: ${c} read only once, as ${a[0]} - check it`
+          : `${ign}: ${c} read as ${a.join(' or ')} - check it`);
     }
     rows.push({ ign, agent, cells, y: Math.round(l.cy) });
     out.push([ign, agent, ...vals].filter(Boolean).join('  '));

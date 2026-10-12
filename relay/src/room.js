@@ -18,7 +18,7 @@
 import {
   PROTOCOL_VERSION, MAX_RES_BODY_BYTES, REQ_TIMEOUT_MS, SEAT_TTL_MS, INVITE_TTL_MS,
   decodeFrame, encodeFrame, isRole, needsAdmit, cleanName, normalizeCode, randomId, sha256Hex,
-  timingSafeEqual, base64ToBytes, makeCode,
+  timingSafeEqual, base64ToBytes, makeCode, CHANNEL_PATHS,
 } from './protocol.js';
 
 const MAX_SEATS = 12;
@@ -163,7 +163,9 @@ export class Room {
     invites[code] = inv;
     await this.storage.put('seats', seats);
     await this.storage.put('invites', invites);
-    this.sendAgent({ t: 'join', seat: { id: seat.id, name: seat.name, role: seat.role, pending: seat.pending, joinedAt: now } });
+    // The code goes back to the rig so IT can say what the seat is for (a talent
+    // seat's slot lives in the agent's own invite record, not here).
+    this.sendAgent({ t: 'join', seat: { id: seat.id, name: seat.name, role: seat.role, pending: seat.pending, joinedAt: now, code } });
 
     return json({ ok: true, seat: { id: seat.id, name: seat.name, role: seat.role, pending: seat.pending } }, 200, {
       'X-Cta-Seat-Token': `${seat.id}.${token}`,
@@ -229,11 +231,16 @@ export class Room {
     if (seat.pending) return json({ ok: false, error: 'waiting to be admitted at the desk' }, 403);
     if (!this.agentSocket()) return json({ ok: false, error: 'the rig is not connected' }, 503);
 
+    // Which socket the page asked for (/ws or /talent/signaling). Passed on, not
+    // judged: the agent decides whether this seat may have it.
+    const asked = request.headers.get('X-Cta-Path') || '/ws';
+    const p = CHANNEL_PATHS.includes(asked) ? asked : '/ws';
+
     const ch = this.nextCh++;
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], ['client', `ch:${ch}`]);
     pair[1].serializeAttachment({ kind: 'client', ch, seatId: seat.id });
-    this.sendAgent({ t: 'open', c: ch, seat: { id: seat.id, role: seat.role, name: seat.name, pending: false } });
+    this.sendAgent({ t: 'open', c: ch, p, seat: { id: seat.id, role: seat.role, name: seat.name, pending: false } });
     void this.pushRoster();
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -289,7 +296,11 @@ export class Room {
       }
       case 'close': {
         const ws = this.socketForChannel(msg.c);
-        if (ws) { try { ws.close(1000, 'closed by the rig'); } catch { /* gone */ } }
+        // The rig may say why (the talent page stops retrying on 'replaced').
+        // Only 1000 or an application code, and a short one-line reason.
+        const code = msg.code === 1000 || (msg.code >= 4000 && msg.code <= 4999) ? msg.code : 1000;
+        const reason = typeof msg.reason === 'string' && msg.reason ? msg.reason.replace(/[^\x20-\x7e]/g, '').slice(0, 64) : 'closed by the rig';
+        if (ws) { try { ws.close(code, reason); } catch { /* gone */ } }
         return;
       }
       case 'invite': {
