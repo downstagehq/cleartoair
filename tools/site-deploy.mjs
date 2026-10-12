@@ -45,6 +45,11 @@ for (const f of ['favicon.ico', 'favicon.svg', 'favicon-32.png', 'og.png', 'site
 const ignore = read('.assetsignore');
 check(['worker.js', 'wrangler.toml', '.assetsignore', 'api', 'releases'].every((x) => ignore.includes(x)), '.assetsignore keeps worker.js, wrangler.toml, api/ and the legacy releases/ off the site');
 
+// The docs section is generated from docs/guide/: it must match the Markdown, with no broken links.
+const docs = await run('node', [path.join(ROOT, 'tools', 'docs', 'build-site.mjs'), '--check'], { capture: true });
+check(docs.code === 0, `site/docs matches docs/guide (node tools/docs/build-site.mjs)${docs.code ? `:\n${docs.out}` : ''}`);
+check(/<loc>https:\/\/cleartoair\.com\/docs\/<\/loc>/.test(read('sitemap.xml')), 'sitemap.xml lists the docs');
+
 // Promises the page makes to people: printed so a human reads them before every deploy.
 const promises = [...html.matchAll(/[^.>]*\bemail you\b[^<]*?\.(?=\s|<|$)/gi)].map((m) => m[0].trim());
 for (const p of promises) notes.push(`page promise: "${p}"`);

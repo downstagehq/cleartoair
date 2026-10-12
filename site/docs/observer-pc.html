@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observer PC · Clear to Air docs</title>
+<meta name="description" content="Run CS2 or Dota 2 on a separate observer PC and send its game data to the broadcast PC over the venue network.">
+<meta name="theme-color" content="#0B0D10">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<link rel="canonical" href="https://cleartoair.com/docs/observer-pc">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Observer PC · Clear to Air docs">
+<meta property="og:description" content="Run CS2 or Dota 2 on a separate observer PC and send its game data to the broadcast PC over the venue network.">
+<meta property="og:url" content="https://cleartoair.com/docs/observer-pc">
+<meta property="og:image" content="https://cleartoair.com/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#doc">Skip to content</a>
+<header class="site-head">
+  <div class="wrap">
+    <a class="wordmark" href="/" aria-label="Clear to Air, home"><svg class="logo" viewBox="49.27 362.23 500.02 75.44" aria-hidden="true" focusable="false"><defs><mask id="cta-a-nav" maskUnits="userSpaceOnUse" x="49.27" y="362.23" width="500.02" height="75.44"><rect x="49.27" y="362.23" width="500.02" height="75.44" fill="#fff"/><path fill="#000" d="M423.27,420.17c-1.92-.06-3.5-.9-3.94-2.45-.36-1.25.27-3.41,1.74-4.22,2.78-1.53,5.86-1.56,9.24-1.36.41,2.21.07,4.23-1.45,5.97-1.14,1.3-3.24,2.13-5.6,2.06Z"/><path fill="#000" d="M193.6,420.18c-2.18.01-3.78-.98-4.14-2.68-.32-1.52.49-3.53,2.16-4.25,2.81-1.23,5.7-1.3,8.97-1.1.28,2.19-.09,4.13-1.49,5.91-1.05,1.33-3.28,2.11-5.49,2.13Z"/></mask></defs><g class="cta-word" mask="url(#cta-a-nav)"><path d="M346.87,399.42c-3.72-.75-7.45-.37-10.1,2.59-2.82,4.27-3.22,10.48.19,14.66s10.19,3.94,13.58.09c2.51-2.85,2.68-6.51,2.4-10.1-1.07-12.39-9.14-17.86-21.15-18.21,6.22-2.43,12.88-2.61,19.18-1.34,11.03,2.22,17.59,11.56,17.47,22.52-.11,10.07-5.67,18.74-15.63,21.46-12.37,3.37-27.02.03-31.87-12.46-2.35-6.05-2.26-12.82.1-18.81,2.17-5.5,7.04-8.82,12.55-8.97s10.95,2.69,13.29,8.6Z"/><path d="M161.88,429.66c-9.05,4.08-22.41,4.05-29.94-2.8-4.1-3.72-5.45-9.62-2.87-14.65,2.15-4.18,6.62-7.17,11.43-7.22l13.93-.15c-.09-3.4-2.45-5.62-5.63-6.13-5.97-.68-11.8,1.37-16.33,5.33-3.65,3.23-5.62,7.42-6.28,12.46-3.39-12.07,1.87-26.19,14.57-29.34,4.72-1.17,9.55-1.13,14.14.23,9.28,2.74,14.46,11.25,13.52,20.72-.43,4.33-3.08,7.32-7.63,7.32h-20.3c.51,2.5,2.65,3.66,5.11,4.19,8.05,1.72,14.54-2.9,18.38-.07,1.62,1.2,2.1,3.59,1.8,5.46s-1.87,3.73-3.9,4.64Z"/><path d="M437.77,431.03c-3.5-.1-5.95-1.35-7.25-4.65-3.61,6.58-15.05,7.09-20.58,3.44-6.98-4.62-8.3-15.05-2.59-21.2,6.03-6.49,17.93-6.61,26.88-5.35,5.69.8,10.68,5.36,11.4,11.18.41,3.35.3,6.86,0,10.08-.37,4.12-3.76,6.62-7.87,6.5ZM423.27,420.17c2.36.08,4.46-.75,5.6-2.06,1.52-1.74,1.86-3.76,1.45-5.97-3.38-.19-6.46-.16-9.24,1.36-1.47.81-2.09,2.96-1.74,4.22.44,1.55,2.02,2.39,3.94,2.45Z"/><path d="M207.59,431.03c-3.47-.17-5.87-1.61-6.83-4.65-4.22,6.96-16.05,7.08-21.42,2.91-5.62-4.36-7.14-12.87-3.22-18.89,5.35-8.23,19.12-8.65,28.72-7.02,7.08,1.2,11.59,7.51,11.28,14.44l-.29,6.66c-.19,4.27-3.92,6.77-8.23,6.56ZM193.6,420.18c2.21-.01,4.45-.8,5.49-2.13,1.4-1.77,1.77-3.71,1.49-5.91-3.27-.2-6.16-.13-8.97,1.1-1.67.73-2.49,2.73-2.16,4.25.36,1.71,1.96,2.7,4.14,2.68Z"/><path d="M72.69,401.67c-2.44,2.96-2.99,6.79-2.7,10.42.66,8.23,5.12,15.06,11.98,20.05-7.16.61-14.42-.94-20.15-5.44-6.59-5.17-8.46-15.71-6.43-24.15,3.55-14.78,20.73-19.28,33.81-14.39,2.39.89,4.43,2.7,5,5.13.45,1.94-.11,4.03-1.3,5.34s-3.33,2.02-5.18,1.71l-7.06-1.2c-2.72-.46-6.04.2-7.96,2.53Z"/><path d="M115.37,415.97c-7.92-.74-15.2-6.67-15.19-14.1l.04-27.54c0-4.27,3.41-6.75,7.31-6.83s7.7,2.42,7.71,6.86l.13,41.61Z"/><path d="M316.15,399.06c-3.89,3.71-16.94-3.61-23.75,12.6l-.08-11.2c-2.09-.05-3.95-.33-5.19-1.58-2.21-2.22-2.25-7.28-.1-9.66,1.17-1.29,3.19-1.56,5.16-1.57l.61-6.87c.34-3.84,3.93-5.62,7.56-5.5,3.08.1,5.98,1.52,6.81,4.78.58,2.29.57,5.01.65,7.56l6.41.4c3.41.21,5.36,7.74,1.91,11.04Z"/><path d="M526.07,407.51c-6.51-1.85-12.87.96-15.33,7.04l.05-19.84c.01-4.63,3.81-7.37,8.12-7.06,2.82.2,5.04,1.45,6.4,4.17,3.17-5.46,11.44-7.01,16.42-4.08,2.81,1.65,2.63,5.35,1.59,7.78-2.63,6.15-10.6,1.63-14.47,4.61-2.3,1.78-2.82,4.74-2.77,7.38Z"/><path d="M237.1,407.51c-6.21-1.78-12.55.77-15.17,6.96v-19.81c.02-4.62,3.92-7.37,8.16-7.02,2.9.25,4.89,1.43,6.42,4.21,2.57-4.49,7.52-5.93,12.48-5.42,2.95.3,5.76,1.74,6.08,4.88.22,2.17-.46,4.59-1.78,5.93-3.4,3.47-8.71.34-13.41,2.7-1.88,2.05-2.61,4.22-2.78,7.56Z"/><path d="M446.1,410.66c-3.72-10.64-16.43-12.22-27.49-10.81-2.66.34-5.52.42-8.02-.2-2.72-.68-3.62-3.39-3.64-5.76s1.78-4.26,4.38-5.17c7.19-2.52,14.93-3.06,22.45-1.59,10.79,2.1,12.84,12.94,12.32,23.53Z"/><path d="M216.31,410.63c-3.89-10.64-16.71-12.19-27.39-10.79-2.78.36-5.79.47-8.37-.26s-3.38-3.32-3.42-5.71c-.04-2.25,1.6-4.18,4.11-5.07,7.31-2.6,15.21-3.18,22.86-1.62,10.96,2.23,12.52,13.37,12.21,23.45Z"/><path d="M317.15,421.62c1.63,1.63,1.69,4.12,1.09,6.08-1.72,5.65-13.54,5.83-19.27,2.12-6.01-3.9-7.75-12.52-4.39-18.64,2.66-4.85,7.72-7.06,13.12-7.37l.21,12.08c.1,5.74,6.46,2.95,9.24,5.72Z"/><path d="M525.94,423.71c-.04,4.8-3.65,7.63-8.01,7.36-3.23-.2-5.88-1.77-6.72-5.11-.72-2.87-.96-6.46.17-9.34,2.3-5.82,8.74-8.12,14.67-6.28l-.11,13.36Z"/><path d="M237.02,424.01c-.04,4.45-3.45,7.09-7.36,7.07s-6.82-1.94-7.48-5.83c-.41-2.38-.62-5.54.13-7.93,1.97-6.26,8.75-8.93,14.84-6.97l-.13,13.65Z"/><path d="M120.93,425.19c-.63,5.92-9.73,7.98-15.33,4.72-6.52-3.8-5.61-14.13-5.32-22.43,1.39,4.23,3.89,7.32,7.95,9.25,3.18,1.51,6.74,1.66,10.21,2.4,2.41.51,2.7,4.05,2.49,6.06Z"/><path d="M80.46,428.18c-2.67-2.6-4.08-5.94-4.98-9.2,5.45,2.04,10.57-1.74,15.37-.32,2.96.87,4.42,5.18,2.99,7.8-2.69,4.93-9.32,5.67-13.38,1.71Z"/></g><g class="cta-lamp is-ok"><path d="M457.28,417.71c-2.74-2.54-2-6.49.05-8.83s5.85-3.77,8.51-1.42l9,7.97,19.04-23.05c2.16-2.61,6.41-1.5,8.41.19,2.33,1.97,3.8,6.07,1.54,8.77l-23.38,27.92c-2.61,3.12-7,3.41-9.99.65l-13.18-12.21Z"/><circle cx="473.86" cy="391.93" r="9.94"/></g></svg></a>
+    <nav class="site-nav" aria-label="Site">
+      <a href="/">Home</a>
+      <a href="./" aria-current="false">Docs</a>
+      <a href="https://github.com/downstagehq/cleartoair/releases" rel="noopener">Download</a>
+      <a class="btn btn-sm" href="https://github.com/downstagehq/cleartoair" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+<div class="docs-shell wrap">
+  <nav class="docs-nav" aria-label="Docs">
+    <div class="docs-nav-h">User guide</div>
+    <a href="./">Overview</a><a href="getting-started">Getting started</a><a href="first-show">First show in 30 minutes</a><a href="adapters">Game data adapters</a><a href="observer-pc" aria-current="page">Observer PC</a><a href="talent-links">Talent links and remote seats</a><a href="replays">Replays</a><a href="troubleshooting">Troubleshooting</a><a href="faq">FAQ</a>
+  </nav>
+  <main id="doc" class="doc">
+<h1>Observer PC</h1>
+<p>Run CS2 or Dota 2 on a separate observer PC and send its game data to the broadcast PC over the venue network.</p>
+<p>This was added in 0.3.3. It works for the two Game State Integration adapters only: CS2 and Dota 2. League of Legends, Rocket League and Apex still need the game on the broadcast PC.</p>
+<p><strong>Status.</strong> It has been tested over the broadcast PC's own network address. It has not yet been tested with a second PC on a real venue network.</p>
+<h2 id="how-it-stays-safe"><a class="anchor" href="#how-it-stays-safe" aria-hidden="true">#</a>How it stays safe</h2>
+<p>LAN listening is off until you switch it on. While it is off, the game receivers only listen on the broadcast PC itself.</p>
+<p>When you switch it on:</p>
+<ul><li>The receivers accept game data from the addresses you list, one by one. There are no ranges, because a venue network is shared with players, and a range would let any machine on it put a score on air.</li><li>Everyone else on the network is refused. Preflight names each refused address.</li><li>The GSI token is still checked on every payload.</li><li>The control room and the API stay on the broadcast PC only. Nothing else is opened to the network.</li><li>You can list up to 16 observer PCs.</li></ul>
+<p>Only the broadcast PC itself can change this setting. A remote seat cannot.</p>
+<h2 id="connect-an-observer-pc"><a class="anchor" href="#connect-an-observer-pc" aria-hidden="true">#</a>Connect an observer PC</h2>
+<p>You need the observer PC's IP address on the venue network, for example <code>192.168.1.20</code>.</p>
+<ol><li>On the broadcast PC, set the title to CS2 or Dota 2 (Setup → <strong>Title</strong>). The <strong>Observer PC</strong> panel only shows for these two.</li><li>Open the <strong>Data</strong> tab. Under the adapter cards, find <strong>Observer PC</strong>.</li><li>Switch it from <strong>LAN off</strong> to <strong>LAN on</strong>.</li><li>In <strong>Allowed observer PCs</strong>, type the observer PC's address. One address per line.</li><li>Press <strong>Save</strong>.</li><li>If the broadcast PC has more than one address (wired, Wi-Fi, a VPN), pick the one the observer PC can reach under &quot;This PC on the observer's network&quot;.</li><li>Press <strong>Copy</strong> on the cfg shown below. It is the same cfg as on the broadcast PC, pointed at the broadcast PC's address and carrying the current token.</li><li>On the observer PC, save it as <code>gamestate_integration_cleartoair.cfg</code> in the game's cfg folder, without a UTF-8 BOM. For CS2 that is <code>...\Counter-Strike Global Offensive\game\csgo\cfg\</code>. For Dota 2 it is <code>...\dota 2 beta\game\dota\cfg\gamestate_integration\</code>, and the observer PC also needs the <code>-gamestateintegration</code> launch option.</li><li>Restart the game on the observer PC and spectate the match.</li><li>On the broadcast PC, make sure the adapter is started (Data tab → the adapter card → <strong>Start</strong>).</li></ol>
+<p>Windows may ask once whether Node.js may use the network. Allow it for <strong>Private networks</strong>.</p>
+<figure><a href="img/op-observer-pc-on.webp"><img src="img/op-observer-pc-on.webp" alt="Data tab, Observer PC panel with LAN on and one observer PC allowed" loading="lazy"></a><figcaption>Data tab, Observer PC panel with LAN on and one observer PC allowed</figcaption></figure>
+<h2 id="check-that-it-works"><a class="anchor" href="#check-that-it-works" aria-hidden="true">#</a>Check that it works</h2>
+<p>Below <strong>Save</strong>, a pill per running receiver shows where it listens:</p>
+<ul><li><code>cs2gsi · 0.0.0.0:7701</code> (or <code>dota2gsi · 0.0.0.0:7702</code>) means it accepts the listed addresses.</li><li>An amber pill with <code>127.0.0.1</code> means the receiver has not rebound yet. Press <strong>Save</strong> again, or <strong>Stop</strong> and <strong>Start</strong> the adapter.</li></ul>
+<p>When data arrives, the adapter card turns <strong>connected</strong> and the <strong>Live feed</strong> panel fills in.</p>
+<p>A <strong>refused</strong> pill lists any address that sent game data but is not on the list, with a count. If one of them is your observer PC, you typed the wrong address: add the one shown.</p>
+<h2 id="read-the-preflight-checks"><a class="anchor" href="#read-the-preflight-checks" aria-hidden="true">#</a>Read the preflight checks</h2>
+<p>Preflight reports the observer setup in plain words:</p>
+<div class="table"><table><thead><tr><th>Check</th><th>Meaning</th><th>Fix</th></tr></thead><tbody><tr><td>&quot;Game data accepted from the LAN: ...&quot;</td><td>Working as set.</td><td>None.</td></tr><tr><td>&quot;LAN is on, but no observer PC is allowed yet&quot;</td><td>The receivers listen, but nobody may send.</td><td>Add the observer PC's address.</td></tr><tr><td>&quot;LAN is on but a receiver still listens on this PC only&quot;</td><td>The receiver did not rebind.</td><td>Data tab → Observer PC → <strong>Save</strong>.</td></tr><tr><td>&quot;Game data refused from N address(es) not on the list&quot;</td><td>Someone sent game data and was turned away.</td><td>If it is your observer PC, add its address. If not, someone on this network is sending game data to the rig.</td></tr><tr><td>&quot;A game receiver still listens on the LAN&quot;</td><td>LAN was switched off but a receiver was not restarted.</td><td>Switch LAN off again, or <strong>Stop</strong> and <strong>Start</strong> the adapter.</td></tr></tbody></table></div>
+<figure><a href="img/op-preflight-no-observer.webp"><img src="img/op-preflight-no-observer.webp" alt="Preflight with the warning that no observer PC is allowed yet" loading="lazy"></a><figcaption>Preflight with the warning that no observer PC is allowed yet</figcaption></figure>
+<h2 id="switch-it-off"><a class="anchor" href="#switch-it-off" aria-hidden="true">#</a>Switch it off</h2>
+<p>Data tab → <strong>Observer PC</strong> → switch to <strong>LAN off</strong>. The receivers rebind to the broadcast PC only, and game data is accepted from this PC alone.</p>
+<h2 id="rules-for-the-address-list"><a class="anchor" href="#rules-for-the-address-list" aria-hidden="true">#</a>Rules for the address list</h2>
+<ul><li>Exact IP addresses only. A range such as <code>192.168.1.0/24</code> is refused with &quot;ranges are not accepted - list each observer PC&quot;.</li><li>The broadcast PC itself is always allowed, so you do not list it.</li><li><code>0.0.0.0</code>, <code>::</code> and <code>255.255.255.255</code> are refused: none of them is a single machine.</li><li>Edits to the list apply to the next payload. Switching LAN on or off restarts the receivers.</li></ul>
+<h2 id="related"><a class="anchor" href="#related" aria-hidden="true">#</a>Related</h2>
+<ul><li><a href="adapters#connect-cs2">Connect CS2</a> and <a href="adapters#connect-dota-2">Connect Dota 2</a></li><li><a href="troubleshooting#no-game-data-from-the-observer-pc">Troubleshooting: no game data from the observer PC</a></li></ul>
+    <nav class="doc-pager" aria-label="Pages"><a class="prev" href="adapters"><span>Previous</span>Game data adapters</a><a class="next" href="talent-links"><span>Next</span>Talent links and remote seats</a></nav>
+    <p class="doc-edit"><a href="https://github.com/downstagehq/cleartoair/blob/main/docs/guide/observer-pc.md" rel="noopener">Edit this page on GitHub</a> · Something wrong? <a href="https://github.com/downstagehq/cleartoair/issues" rel="noopener">Open an issue</a>.</p>
+  </main>
+</div>
+<footer class="site-foot">
+  <div class="wrap"><div class="copy"><span>Clear to Air is free and open source: app AGPL-3.0+, packs and overlay renderer MIT. "Clear to Air" and the lamp mark are trademarks of the project. Game names and logos belong to their publishers.</span></div></div>
+</footer>
+</body>
+</html>
